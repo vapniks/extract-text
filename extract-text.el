@@ -89,7 +89,7 @@ be the string searched."
 	   collect (match-string-no-properties i str)))
 
 ;;;###autoload
-(defun extract-matching-strings (regexp &optional startpos endpos noerror)
+(cl-defun extract-matching-strings (regexp &key startpos endpos noerror)
   "Extract strings from current buffer that match subexpressions of REGEXP.
 If STARTPOS is supplied searching starts at that buffer position, otherwise it
 starts from the current position. If ENDPOS is supplied then any matches must
@@ -172,7 +172,7 @@ If no matching rectangle is found then an error is thrown unless :NOERROR is non
 		  ((stringp end) (search end ematchfun nil))
 		  ((and (listp end)
 			(stringp (car end))
-			((integerp (cdr end))))
+			(integerp (cdr end)))
 		   (search (car end) ematchfun (cdr end))))))
       (unless (memq 'nomatch (list start2 end2))
 	(setq start2 (or start2 (adjust end2 t))
@@ -196,7 +196,10 @@ If no matching rectangle is found then an error is thrown unless :NOERROR is non
 ;;     (rect foo bar :top :bottom :left :right :repeat t)
 ;;     :repeat 5))
 
-;(cl-defun extract-text)
+(cl-defun extract-text (a b c)
+  "foo baa"
+  
+  )
 
 
 
