@@ -107,6 +107,7 @@ If any subexpression doesn't match then nil will be returned for that element."
 (cl-defun extract-matching-rectangle (start end &key (incstart t) (incend t)
 					    rows cols startpos endpos noerror)
   "Extract a rectangle of text from the current buffer.
+
 The rectangle can be specified in several different ways:
 
  1) By passing corner positions to :START and :END (see `extract-rectangle')
@@ -120,9 +121,12 @@ The rectangle can be specified in several different ways:
     The search for matching strings will start from the beginning of the buffer/string 
     unless the :STARTPOS argument is supplied giving the start position.
 
- 3) By a mixture of the above two methods.
+ 3) By passing cons cells in the form (rep . regex) to :START and :END. In this case the
+    rep'th match to regex will be used for the start/end position.
 
- 4) By specifying just one of :START or :END (as a position or regular expression), 
+ 4) By a mixture of the above methods.
+
+ 5) By specifying just one of :START or :END (as a position, regexp, or cons cell), 
     and also specifying the number of :COLS and :ROWS of the rectangle. 
     If COLS or ROWS is negative then the columns/rows are counted in the opposite 
     direction to normal, i.e. backwards from START position or forwards from END 
@@ -139,72 +143,41 @@ If no matching rectangle is found then an error is thrown unless :NOERROR is non
       (error "Missing :start/:end or :cols & :rows arguments"))
   (if startpos (goto-char startpos))
   ;; find start & end positions
-  (let* ((startmatch (if incstart 'match-beginning 'match-end))
-	 (endmatch (if incend 'match-end 'match-beginning))
-	 (start2 (cond
+  (cl-flet ((search (regex matchfun count)
+		    (if (re-search-forward regex endpos t count)
+			(if (match-string 1)
+			    (funcall matchfun 1)
+			  (funcall matchfun 0))
+		      (if noerror 'nomatch
+			(error "Unable to match regex: %s" regex))))
+	    (adjust (begin type)
+		    (save-excursion
+		      (goto-char begin)
+		      (let ((col (current-column))) 
+			(forward-line (if type (- 1 rows) (- rows 1)))
+			(move-to-column (if type (- col (1- cols))
+					  (+ col (1- cols))) t)
+			(point)))))
+    (let* ((smatchfun (if incstart 'match-beginning 'match-end))
+	   (ematchfun (if incend 'match-end 'match-beginning))
+	   (start2 (cond
 		    ((numberp start) start)
-		    ((stringp start) (if (re-search-forward start endpos t)
-					 (if (match-string 1)
-					     (funcall startmatch 1)
-					   (funcall startmatch 0))
-				       (if noerror 'nomatch
-					 (error "Unable to match start arg: %s" start))))))
-	 (end2 (cond
+		    ((stringp start) (search start smatchfun nil))
+		    ((and (listp start)
+			  (stringp (car start))
+			  (integerp (cdr start)))
+		     (search (car start) smatchfun (cdr start)))))
+	   (end2 (cond
 		  ((numberp end) end)
-		  ((stringp end) (if (re-search-forward end endpos t)
-				     (if (match-string 1)
-					 (funcall endmatch 1)
-				       (funcall endmatch 0))
-				   (if noerror 'nomatch
-				     (error "Unable to match end arg: %s" end)))))))
-    (unless (memq 'nomatch (list start2 end2))
-      (setq start2 (or start2
-		       (save-excursion
-			 (goto-char end2)
-			 (let ((col (current-column))) 
-			   (forward-line (- 1 rows))
-			   (move-to-column (- col (1- cols)) t)
-			   (point))))
-	    end2 (or end2
-		     (save-excursion
-		       (goto-char start2)
-		       (let ((col (current-column)))
-			 (forward-line (1- rows))
-			 (move-to-column (+ col (1- cols)) t)
-			 (point)))))
-      (extract-rectangle start2 end2))))
-
-;;;;###autoload
-;; (cl-defun extract-matching-block (&key start incstart match end incend check)
-;;   "Extract a block of adjacent line parts from the current buffer.
-;; An example of a block would be an address in a letter header, where each
-;; line of the address may be a different (unknown) length, but they are adjacent 
-;; vertically.
-;; The START argument should be a regexp matching the line before the first line 
-;; of the block, or if INCSTART is t, the first line of the block.
-;; To define the rest of the block you can either supply a MATCH argument, or
-;; an END argument, both of which should be regexp's.
-;; The MATCH argument should match each line of the block between START and
-
-
-;;  which
-;; should be a regexp matching all lines in the block after start, or an END 
-;; argument which should be a regexp matching the line following the block.
-
-;; or the last line of the block if INCEND is non-nil.
-
-;; If any of the regexp arguments contain non-shy parenthesised subexpressions 
-;; then the string matching the first non-shy subexpression will be used to determine
-;; the position rather than the whole match.
-
-;; The CHECK argument can be used as an extra check of the lines in the block:
-;; if it is 'left then only left aligned matches are accepted,
-;; if it is 'right then only right aligned matches are accepted,
-;; if it is 'overlap (default) then only matches with overlapping columns are accepted,
-;; if it is 'any then any matches are accepted, even if the columns do not overlap."
-  
-  
-;;   )
+		  ((stringp end) (search end ematchfun nil))
+		  ((and (listp end)
+			(stringp (car end))
+			((integerp (cdr end))))
+		   (search (car end) ematchfun (cdr end))))))
+      (unless (memq 'nomatch (list start2 end2))
+	(setq start2 (or start2 (adjust end2 t))
+	      end2 (or end2 (adjust start2 nil)))
+	(extract-rectangle start2 end2)))))
 
 ;; plan call above functions after copying required rectangle into separate buffer
 ;; limits of rectangle are defined by regexp/position/percentage args top bottom left right
@@ -222,6 +195,8 @@ If no matching rectangle is found then an error is thrown unless :NOERROR is non
 ;;   '((regex foo :top ? :bottom ? :left ? :right ? :repeat 4)
 ;;     (rect foo bar :top :bottom :left :right :repeat t)
 ;;     :repeat 5))
+
+;(cl-defun extract-text)
 
 
 
