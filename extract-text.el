@@ -105,8 +105,10 @@ If any subexpression doesn't match then nil will be returned for that element."
 
 ;;;###autoload
 (cl-defun extract-matching-rectangle (start end &key (incstart t) (incend t)
-					    rows cols startpos endpos noerror)
+					    rows cols startpos endpos noerror join)
   "Extract a rectangle of text from the current buffer.
+The return value is a list of strings (the lines of the rectangle), or if :JOIN is non-nil
+a single string formed by concatenating the rectangle lines with JOIN as a separator.
 
 The rectangle can be specified in several different ways:
 
@@ -133,8 +135,8 @@ The rectangle can be specified in several different ways:
     position. This allows you to specify the rectangle from any corner position.
 
 By default regexp searches for start and end positions will start from the current cursor
-position up until (point-max). If STARTPOS is supplied then searches will start from that 
-position instead, and if ENDPOS is supplied they will not pass that point.
+position up until (point-max). If :STARTPOS is supplied then searches will start from that 
+position instead, and if :ENDPOS is supplied they will not pass that point.
 If no matching rectangle is found then an error is thrown unless :NOERROR is non-nil."
   ;; check we have the required arguments
   (if (not (and (or start end)
@@ -177,7 +179,25 @@ If no matching rectangle is found then an error is thrown unless :NOERROR is non
       (unless (memq 'nomatch (list start2 end2))
 	(setq start2 (or start2 (adjust end2 t))
 	      end2 (or end2 (adjust start2 nil)))
-	(extract-rectangle start2 end2)))))
+	(if join (mapconcat 'identity (extract-rectangle start2 end2) join)
+	    (extract-rectangle start2 end2))))))
+
+
+(cl-defun copy-rectangle-to-buffer (start end &key (incstart t) (incend t)
+					  rows cols startpos endpos)
+  "Copy a rectangular region of the current buffer to a new buffer.
+Return the new buffer.
+The arguments are the same as for `extract-matching-rectangle' apart from 
+NOERROR and JOIN which are not included."
+  (let ((buf (generate-new-buffer " *extracted rectangle*"))
+	(rect (extract-matching-rectangle
+	       start end
+	       :incstart incstart :incend incend :rows rows
+	       :cols cols :startpos startpos :endpos endpos)))
+    (with-current-buffer buf
+      (insert (mapconcat 'identity rect "\n"))
+      (goto-char (point-min)))
+    buf))
 
 ;; plan call above functions after copying required rectangle into separate buffer
 ;; limits of rectangle are defined by regexp/position/percentage args top bottom left right
@@ -196,10 +216,20 @@ If no matching rectangle is found then an error is thrown unless :NOERROR is non
 ;;     (rect foo bar :top :bottom :left :right :repeat t)
 ;;     :repeat 5))
 
-(cl-defun extract-text (a b c)
-  "foo baa"
-  
-  )
+;; (cl-defun extract-text (expr)
+;;   "Extract text from buffer."
+;;   (let ((funcs '(regex rect)))
+;;     (cl-loop for elem in expr
+;; 	     if (memq (car elem) funcs)
+;; 	     (eval elem)
+;; 	     else
+;; 	     (let ((rep (cadr (member :rep elem)))
+		   
+;; 		   )
+
+;; 	       )
+;; 	     ))
+;;   )
 
 
 
