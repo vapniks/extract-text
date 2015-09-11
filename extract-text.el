@@ -12,11 +12,11 @@
 ;; URL: https://github.com/vapniks/extract-text
 ;; Keywords: extensions
 ;; Compatibility: GNU Emacs 24.5.1
-;; Package-Requires: 
+;; Package-Requires: ((dash "20150829.433"))
 ;;
 ;; Features that might be required by this library:
 ;;
-;; cl
+;; cl, dash
 ;;
 
 ;;; This file is NOT part of GNU Emacs
@@ -199,6 +199,17 @@ NOERROR and JOIN which are not included."
       (goto-char (point-min)))
     buf))
 
+(defun extract-keyword-arg (key lstsym)
+  "Remove KEY & following item from list referenced by LSTSYM, and return item.
+LSTSYM should be a symbol whose value is a list.
+If KEY is not in the list then return nil."
+  (let* ((lst (eval lstsym))
+	 (ind (-elem-index key lst)))
+    (unless (not ind)
+      (set lstsym (append (-take ind lst) (-drop (+ 2 ind) lst)))
+      (nth ind lst))))
+
+
 ;; plan call above functions after copying required rectangle into separate buffer
 ;; limits of rectangle are defined by regexp/position/percentage args top bottom left right
 ;; or maybe just min & max args to main function. 
@@ -207,14 +218,6 @@ NOERROR and JOIN which are not included."
 
 ;; how to specify repetition until no match??
 
-
-;; extracting keyword args from list
-;; (cadr (member :top '(regex foo :bottom 2 :top 4)))
-
-;; '((regex baa :top :bottom)
-;;   '((regex foo :top ? :bottom ? :left ? :right ? :repeat 4)
-;;     (rect foo bar :top :bottom :left :right :repeat t)
-;;     :repeat 5))
 
 ;; (cl-defun extract-text (expr)
 ;;   "Extract text from buffer."
