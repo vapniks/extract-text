@@ -199,15 +199,20 @@ NOERROR and JOIN which are not included."
       (goto-char (point-min)))
     buf))
 
-(defun extract-keyword-arg (key lstsym)
+(defun extract-keyword-arg (key lstsym &optional pred)
   "Remove KEY & following item from list referenced by LSTSYM, and return item.
 LSTSYM should be a symbol whose value is a list.
-If KEY is not in the list then return nil."
+If KEY is not in the list then return nil.
+If predicate function PRED is supplied then an error will be thrown if 
+PRED returns nil when supplied with the key value as argument."
   (let* ((lst (eval lstsym))
 	 (ind (-elem-index key lst)))
     (unless (not ind)
       (set lstsym (append (-take ind lst) (-drop (+ 2 ind) lst)))
-      (nth ind lst))))
+      (let ((val (nth ind lst)))
+	(if (and pred (not (funcall pred val)))
+	    (error "Invalid value for %S" key)
+	  val)))))
 
 
 ;; plan call above functions after copying required rectangle into separate buffer
