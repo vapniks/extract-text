@@ -12,11 +12,11 @@
 ;; URL: https://github.com/vapniks/extract-text
 ;; Keywords: extensions
 ;; Compatibility: GNU Emacs 24.5.1
-;; Package-Requires: ((dash "20150829.433"))
+;; Package-Requires: ((dash "20150829.433") (macro-utils "1.0"))
 ;;
 ;; Features that might be required by this library:
 ;;
-;; cl, dash
+;; cl, dash, macro-utils
 ;;
 
 ;;; This file is NOT part of GNU Emacs
@@ -41,7 +41,7 @@
 ;;
 ;; Bitcoin donations gratefully accepted: 1FgnGFwRES9MGzoieRDWLmLkjqMT3AsjQF
 ;;
-;; This library provides functions for
+;; This library provides functions for programmatically extracting text from buffers.
 ;;
 ;;
 ;;;;
@@ -61,6 +61,7 @@
 
 ;;; Require
 (eval-when-compile (require 'cl))
+(require 'macro-utils)
 
 ;;; Code:
 
@@ -105,8 +106,8 @@ If any subexpression doesn't match then nil will be returned for that element."
 
 ;;;###autoload
 (cl-defun extract-matching-rectangle (start end &key (incstart t) (incend t)
-					    rows cols startpos endpos noerror join)
-  "Extract a rectangle of text from the current buffer.
+					    rows cols startpos endpos noerror join buffer)
+  "Extract a rectangle of text from the current buffer, or :BUFFER if supplied.
 The return value is a list of strings (the lines of the rectangle), or if :JOIN is non-nil
 a single string formed by concatenating the rectangle lines with JOIN as a separator.
 
@@ -184,8 +185,8 @@ If no matching rectangle is found then an error is thrown unless :NOERROR is non
 
 
 (cl-defun copy-rectangle-to-buffer (start end &key (incstart t) (incend t)
-					  rows cols startpos endpos)
-  "Copy a rectangular region of the current buffer to a new buffer.
+					  rows cols startpos endpos buffer)
+  "Copy a rectangular region of the current buffer (or BUFFER) to a new buffer.
 Return the new buffer.
 The arguments are the same as for `extract-matching-rectangle' apart from 
 NOERROR and JOIN which are not included."
@@ -193,26 +194,28 @@ NOERROR and JOIN which are not included."
 	(rect (extract-matching-rectangle
 	       start end
 	       :incstart incstart :incend incend :rows rows
-	       :cols cols :startpos startpos :endpos endpos)))
+	       :cols cols :startpos startpos :endpos endpos
+	       :buffer buffer)))
     (with-current-buffer buf
       (insert (mapconcat 'identity rect "\n"))
       (goto-char (point-min)))
     buf))
 
-(defun extract-keyword-arg (key lstsym &optional pred)
+(defmacro extract-keyword-arg (key lstsym &optional pred)
   "Remove KEY & following item from list referenced by LSTSYM, and return item.
 LSTSYM should be a symbol whose value is a list.
 If KEY is not in the list then return nil.
-If predicate function PRED is supplied then an error will be thrown if 
+If predicate function PRED is supplied then an error will be thrown if
 PRED returns nil when supplied with the key value as argument."
-  (let* ((lst (eval lstsym))
-	 (ind (-elem-index key lst)))
-    (unless (not ind)
-      (set lstsym (append (-take ind lst) (-drop (+ 2 ind) lst)))
-      (let ((val (nth ind lst)))
-	(if (and pred (not (funcall pred val)))
-	    (error "Invalid value for %S" key)
-	  val)))))
+  (let ((lst (gensym)))
+    `(let* ((,lst (eval ,lstsym))
+	    (ind (-elem-index ,key ,lst)))
+       (unless (not ind)
+	 (let ((val (nth (1+ ind) ,lst)))
+	   (set ,lstsym (append (-take ind ,lst) (-drop (+ 2 ind) ,lst)))
+	   (if (and ,pred (not (funcall ,pred val)))
+	       (error "Invalid value for %S" ,key)
+	     val))))))
 
 
 ;; plan call above functions after copying required rectangle into separate buffer
@@ -221,23 +224,50 @@ PRED returns nil when supplied with the key value as argument."
 ;; Better to do it this way (copying rectangle to a temp buffer), since otherwise we have
 ;; problems when the regexp matches partly inside the required box and partly outside
 
-;; how to specify repetition until no match??
+;; how to specify repetition until no match?? Use t value for :rep arg
+;; allow :join or :sep arg to specify whether output from specs in list should be joined into single list
+;; or returned separate lists (within main returned list)
 
 
-;; (cl-defun extract-text (expr)
-;;   "Extract text from buffer."
-;;   (let ((funcs '(regex rect)))
-;;     (cl-loop for elem in expr
-;; 	     if (memq (car elem) funcs)
-;; 	     (eval elem)
-;; 	     else
-;; 	     (let ((rep (cadr (member :rep elem)))
+(cl-defun extract-text (&rest specs &key string buffer)
+  "Extract text from buffer according to specifications SPECS.
+SPECS should be a list of wrapper functions for extracting bits of text."
+  (let ((funcs '(regex rect)))
+    (cl-loop for spec in specs
+	     (let ((reps (or (extract-keyword-arg :reps 'spec) 1))
+		   (topleft (extract-keyword-arg :tl 'spec))
+		   (bottomright (extract-keyword-arg :br 'spec))
+		   (inctl (extract-keyword-arg :inctl 'spec))
+		   (incbr (extract-keyword-arg :incbr 'spec))
+		   (rows (extract-keyword-arg :rows 'spec))
+		   (cols (extract-keyword-arg :cols 'spec))
+		   (buf (or buffer (and string
+					(generate-new-buffer
+					 "*extract from string*"))
+			    (current-buffer)))
+		   results)
+	       (if string (with-current-buffer buf (insert string)))
+	       (with-current-buffer
+		   (if (or topleft bottomright)
+		       (copy-rectangle-to-buffer
+			topleft bottomright :incstart inctl
+			:incend incbr :rows rows :cols cols :buffer buf)
+		     buf)
+		 (goto-char (point-min))
+		 (dotimes (i (1- reps))
+		   (if (listp (car spec))
+		       (cl-loop for func in spec
+				(setq results (append results (eval func)))
+				)
+		     ;; handle case of single function
+		     (setq results (append results (eval spec)))
+
+		       ))
 		   
-;; 		   )
-
-;; 	       )
-;; 	     ))
-;;   )
+		   )
+		 ;; extract the text
+		 ))))
+	       
 
 
 
