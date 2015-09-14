@@ -105,49 +105,42 @@ If any subexpression doesn't match then nil will be returned for that element."
       (match-strings-no-properties regexp)))
 
 ;;;###autoload
-(cl-defun extract-matching-rectangle (start end &key (incstart t) (incend t)
-					    rows cols startpos endpos noerror join buffer)
-  "Extract a rectangle of text from the current buffer, or :BUFFER if supplied.
+(cl-defun extract-matching-rectangle (tl br &key (inctl t) (incbr t) rows cols noerror join)
+  "Extract a rectangle of text from the current buffer.
 The return value is a list of strings (the lines of the rectangle), or if :JOIN is non-nil
 a single string formed by concatenating the rectangle lines with JOIN as a separator.
 
 The rectangle can be specified in several different ways:
 
- 1) By passing corner positions to :START and :END (see `extract-rectangle')
+ 1) By passing corner positions to :TL and :BR (see `extract-rectangle')
 
- 2) By passing regular expressions to :START and :END which match strings delimiting the
+ 2) By passing regular expressions to :TL and :BR which match strings delimiting the
     corner positions. If the regexp contains any non-shy subexpressions, the first one will 
-    be used for determining the start/end match.
+    be used for determining the tl/br match.
     By default the matched strings will be included in the rectangle. To exclude the matched 
-    start/end text so the rectangle starts/ends after/before the matched text you must set 
-    :INCSTART and/or :INCEND to nil (they are t by default).
-    The search for matching strings will start from the beginning of the buffer/string 
-    unless the :STARTPOS argument is supplied giving the start position.
+    tl/br text so the rectangle starts/ends after/before the matched text you must set 
+    :INCTL and/or :INCBR to nil (they are t by default).
 
- 3) By passing cons cells in the form (rep . regex) to :START and :END. In this case the
+ 3) By passing cons cells in the form (rep . regex) to :TL and :BR. In this case the
     rep'th match to regex will be used for the start/end position.
 
  4) By a mixture of the above methods.
 
- 5) By specifying just one of :START or :END (as a position, regexp, or cons cell), 
+ 5) By specifying just one of :TL or :BR (as a position, regexp, or cons cell), 
     and also specifying the number of :COLS and :ROWS of the rectangle. 
     If COLS or ROWS is negative then the columns/rows are counted in the opposite 
-    direction to normal, i.e. backwards from START position or forwards from END 
+    direction to normal, i.e. backwards from TL position or forwards from BR 
     position. This allows you to specify the rectangle from any corner position.
 
-By default regexp searches for start and end positions will start from the current cursor
-position up until (point-max). If :STARTPOS is supplied then searches will start from that 
-position instead, and if :ENDPOS is supplied they will not pass that point.
 If no matching rectangle is found then an error is thrown unless :NOERROR is non-nil."
   ;; check we have the required arguments
-  (if (not (and (or start end)
-		(or (and start end)
-		    (and cols rows))))
-      (error "Missing :start/:end or :cols & :rows arguments"))
-  (if startpos (goto-char startpos))
-  ;; find start & end positions
+  (if (not (and (or tl br)
+		(or (and tl br)
+		    (and rows cols))))
+      (error "Missing :tl/:br or :cols & :rows arguments"))
+  ;; find tl & br positions
   (cl-flet ((search (regex matchfun count)
-		    (if (re-search-forward regex endpos t count)
+		    (if (re-search-forward regex nil t count)
 			(if (match-string 1)
 			    (funcall matchfun 1)
 			  (funcall matchfun 0))
@@ -156,45 +149,42 @@ If no matching rectangle is found then an error is thrown unless :NOERROR is non
 	    (adjust (begin type)
 		    (save-excursion
 		      (goto-char begin)
-		      (let ((col (current-column))) 
+		      (let ((col (current-column)))
 			(forward-line (if type (- 1 rows) (- rows 1)))
 			(move-to-column (if type (- col (1- cols))
 					  (+ col (1- cols))) t)
 			(point)))))
-    (let* ((smatchfun (if incstart 'match-beginning 'match-end))
-	   (ematchfun (if incend 'match-end 'match-beginning))
-	   (start2 (cond
-		    ((numberp start) start)
-		    ((stringp start) (search start smatchfun nil))
-		    ((and (listp start)
-			  (stringp (car start))
-			  (integerp (cdr start)))
-		     (search (car start) smatchfun (cdr start)))))
-	   (end2 (cond
-		  ((numberp end) end)
-		  ((stringp end) (search end ematchfun nil))
-		  ((and (listp end)
-			(stringp (car end))
-			(integerp (cdr end)))
-		   (search (car end) ematchfun (cdr end))))))
-      (unless (memq 'nomatch (list start2 end2))
-	(setq start2 (or start2 (adjust end2 t))
-	      end2 (or end2 (adjust start2 nil)))
-	(if join (mapconcat 'identity (extract-rectangle start2 end2) join)
-	    (extract-rectangle start2 end2))))))
+    (let* ((tlmatch (if inctl 'match-beginning 'match-end))
+	   (brmatch (if incbr 'match-end 'match-beginning))
+	   (tl2 (cond
+		 ((numberp tl) tl)
+		 ((stringp tl) (search tl tlmatch nil))
+		 ((and (listp tl)
+		       (stringp (car tl))
+		       (integerp (cdr tl)))
+		  (search (car tl) tlmatch (cdr tl)))))
+	   (br2 (cond
+		 ((numberp br) br)
+		 ((stringp br) (search br brmatch nil))
+		 ((and (listp br)
+		       (stringp (car br))
+		       (integerp (cdr br)))
+		  (search (car br) brmatch (cdr br))))))
+      (unless (memq 'nomatch (list tl2 br2))
+	(setq tl2 (or tl2 (adjust br2 t))
+	      br2 (or br2 (adjust tl2 nil)))
+	(if join (mapconcat 'identity (extract-rectangle tl2 br2) join)
+	  (extract-rectangle tl2 br2))))))
 
-
-(cl-defun copy-rectangle-to-buffer (start end &key (incstart t) (incend t)
-					  rows cols startpos endpos buffer)
+(cl-defun copy-rectangle-to-buffer (tl br &key (inctl t) (incbr t)
+				       rows cols buffer)
   "Copy a rectangular region of the current buffer (or BUFFER) to a new buffer.
 Return the new buffer.
 The arguments are the same as for `extract-matching-rectangle' apart from 
 NOERROR and JOIN which are not included."
   (let ((buf (generate-new-buffer " *extracted rectangle*"))
 	(rect (extract-matching-rectangle
-	       start end
-	       :incstart incstart :incend incend :rows rows
-	       :cols cols :startpos startpos :endpos endpos
+	       tl br :inctl inctl :incbr incbr :rows rows :cols cols
 	       :buffer buffer)))
     (with-current-buffer buf
       (insert (mapconcat 'identity rect "\n"))
@@ -216,8 +206,7 @@ PRED returns nil when supplied with the key value as argument."
 	   (if (and ,pred (not (funcall ,pred val)))
 	       (error "Invalid value for %S" ,key)
 	     val))))))
-
-
+ 
 ;; plan call above functions after copying required rectangle into separate buffer
 ;; limits of rectangle are defined by regexp/position/percentage args top bottom left right
 ;; or maybe just min & max args to main function. 
@@ -227,50 +216,98 @@ PRED returns nil when supplied with the key value as argument."
 ;; how to specify repetition until no match?? Use t value for :rep arg
 ;; allow :join or :sep arg to specify whether output from specs in list should be joined into single list
 ;; or returned separate lists (within main returned list)
+;(extract-text (rect a b) ((rect a b :tl :br) (regex "foo") :TL "blah" :BR "foo"))
 
+(defun extract-keyword-bindings (args &optional check &rest keys)
+  "Extract KEYS and corresponding values from ARGS, and return in let-style bindings list.
+If ARGS is a symbol referring to a list, then KEYS and corresponding values will be removed from ARGS.
+If CHECK is non-nil then if there are any keys in ARGS other than those in KEYS an error will be thrown."
+  (cl-loop for key in keys
+	   collect (list (if (string-match "^:" (symbol-name key))
+			     (intern (substring (symbol-name key) 1))
+			   key)
+			 (if (symbolp args)
+			     (extract-keyword-arg key args)
+			   (extract-keyword-arg key 'args)))))
 
-(cl-defun extract-text (&rest specs &key string buffer)
-  "Extract text from buffer according to specifications SPECS.
+(defcustom extract-text-saved-wrappers nil
+  "A list of wrapper functions that can be used with `extract-text'.
+Each element has the form (NAME ARGLIST EXPRESSION [EXPRESSION ...]),
+and represents a function which extracts text from the current buffer
+and returns it as a string or list of strings.
+
+NAME is a symbol naming the wrapper function.
+
+ARGLIST is a list whose elements have the form (ARGUMENT DEFAULT-VALUE).
+These variables are available when evaluating the expressions.
+
+EXPRESSION are elisp forms. They are wrapped in a `progn' and
+compose the body of the wrapper function. This body is executed
+when the function is called by name --e.g. (wrapper)-- as part of
+`extract-text' (which see).
+
+Each wrapper function should return a string or list of strings."
+  :group 'extract-text
+  :type  '(repeat (cons (symbol :tag "Wrapper name")
+                        (cons
+                         (repeat :tag "Argument list"
+                                 (list (symbol :tag "Argument name")
+                                       (sexp :tag "Default value")))
+                         (repeat (sexp :tag "Expression"))))))
+
+(cl-defmacro extract-text (&rest args)
+  "Extract text from :BUFFER or :STRING according to specifications in ARGS.
+If no :BUFFER or :STRING argument is supplied then the current buffer is used.
 SPECS should be a list of wrapper functions for extracting bits of text."
-  (let ((funcs '(regex rect)))
-    (cl-loop for spec in specs
-	     (let ((reps (or (extract-keyword-arg :reps 'spec) 1))
-		   (topleft (extract-keyword-arg :tl 'spec))
-		   (bottomright (extract-keyword-arg :br 'spec))
-		   (inctl (extract-keyword-arg :inctl 'spec))
-		   (incbr (extract-keyword-arg :incbr 'spec))
-		   (rows (extract-keyword-arg :rows 'spec))
-		   (cols (extract-keyword-arg :cols 'spec))
-		   (buf (or buffer (and string
-					(generate-new-buffer
-					 "*extract from string*"))
-			    (current-buffer)))
-		   results)
-	       (if string (with-current-buffer buf (insert string)))
-	       (with-current-buffer
-		   (if (or topleft bottomright)
-		       (copy-rectangle-to-buffer
-			topleft bottomright :incstart inctl
-			:incend incbr :rows rows :cols cols :buffer buf)
-		     buf)
-		 (goto-char (point-min))
-		 (dotimes (i (1- reps))
-		   (if (listp (car spec))
-		       (cl-loop for func in spec
-				(setq results (append results (eval func)))
-				)
-		     ;; handle case of single function
-		     (setq results (append results (eval spec)))
-
-		       ))
-		   
-		   )
-		 ;; extract the text
-		 ))))
+  ;; First set the string/buffer args
+  `(let ,(extract-keyword-bindings 'args :string :buffer)
+     ;; scope in some wrapper functions
+     (cl-flet* ((regex (regexp &key startpos endpos noerror)
+		       (extract-matching-strings
+			regexp :startpos startpos :endpos endpos :noerror noerror))
+		(rect (tl br &key (inctl t) (incbr t) rows cols noerror join)
+		      (extract-matching-rectangle
+		       tl br :inctl inctl :incbr incbr :rows rows :cols cols :noerror noerror :join join))
+		,@(cl-loop for (name . code) in extract-text-saved-wrappers
+			   if (> (length code) 1)
+			   collect `(,name (,@(car code)) ,@(cdr code))
+			   else
+			   collect (list name nil code)))
+       ;; loop over the different extraction specifications
+       (cl-loop for spec in args
+		;; get args for specifying buffer restriction (if any)
+		collect (let ,(extract-keyword-bindings 'spec :REPS :TL :BR :INCTL :INCBR :ROWS :COLS)
+			  ;; check for invalid keyword args when specification is a list of functions
+			  (if (listp (car spec))
+			      (let ((invalid
+				     (-filter (lambda (x)
+						(if (symbolp x)
+						    (string-match ":" (symbol-name x)))) spec)))
+				(if invalid (error "Invalid keyword argument: %s" (car invalid)))))
+			  ;; set defaults and get buffer containing text
+			  (let ((REPS (or REPS 1))
+				(buf (or buffer (and string
+						     (generate-new-buffer "*extract from string*"))
+					 (current-buffer)))
+				results)
+			    (if string (with-current-buffer buf (insert string)))
+			    (with-current-buffer
+				;; execute the restriction (if any) specified by the TL, BR, etc. 
+				(if (or TL BR)
+				    (copy-rectangle-to-buffer TL BR :inctl INCTL
+							      :incbr INCBR :rows ROWS :cols COLS :buffer buf)
+				  buf)
+			      (goto-char (point-min))
+			      ;; extract the text into results
+			      ;; repeat the extraction for REPS repeats
+			      (dotimes (i REPS results)
+				(if (listp (car spec))
+				    ;; if we have a list of functions apply them in turn
+				    (cl-loop for func in spec
+					     (setq results (append results (eval func))))
+				  ;; otherwise just apply a single function
+				  (setq results (append results (eval spec))))))))))))
 	       
-
-
-
 (provide 'extract-text)
 
 ;; (magit-push)
