@@ -114,6 +114,9 @@ The rectangle can be specified in several different ways:
 
  1) By passing corner positions to :TL and :BR (see `extract-rectangle')
 
+ 2) By passing numbers between 0 & 1 to :TL and :BR indicating corner positions as a 
+    fraction of the buffer size, e.g. 0.5 represents the midpoint of the buffer
+
  2) By passing regular expressions to :TL and :BR which match strings delimiting the
     corner positions. If the regexp contains any non-shy subexpressions, the first one will 
     be used for determining the tl/br match.
@@ -157,14 +160,18 @@ If no matching rectangle is found then an error is thrown unless :NOERROR is non
     (let* ((tlmatch (if inctl 'match-beginning 'match-end))
 	   (brmatch (if incbr 'match-end 'match-beginning))
 	   (tl2 (cond
-		 ((numberp tl) tl)
+		 ((integerp tl) tl)
+		 ((and (numberp tl) (<= tl 1) (>= tl 0))
+		  (round (* tl (- (point-max) (point-min)))))
 		 ((stringp tl) (search tl tlmatch nil))
 		 ((and (listp tl)
 		       (stringp (car tl))
 		       (integerp (cdr tl)))
 		  (search (car tl) tlmatch (cdr tl)))))
 	   (br2 (cond
-		 ((numberp br) br)
+		 ((integerp br) br)
+		 ((and (numberp br) (<= br 1) (>= br 0))
+		  (round (* br (- (point-max) (point-min)))))
 		 ((stringp br) (search br brmatch nil))
 		 ((and (listp br)
 		       (stringp (car br))
@@ -176,16 +183,14 @@ If no matching rectangle is found then an error is thrown unless :NOERROR is non
 	(if join (mapconcat 'identity (extract-rectangle tl2 br2) join)
 	  (extract-rectangle tl2 br2))))))
 
-(cl-defun copy-rectangle-to-buffer (tl br &key (inctl t) (incbr t)
-				       rows cols buffer)
-  "Copy a rectangular region of the current buffer (or BUFFER) to a new buffer.
+(cl-defun copy-rectangle-to-buffer (tl br &key (inctl t) (incbr t) rows cols)
+  "Copy a rectangular region of the current buffer to a new buffer.
 Return the new buffer.
 The arguments are the same as for `extract-matching-rectangle' apart from 
 NOERROR and JOIN which are not included."
   (let ((buf (generate-new-buffer " *extracted rectangle*"))
 	(rect (extract-matching-rectangle
-	       tl br :inctl inctl :incbr incbr :rows rows :cols cols
-	       :buffer buffer)))
+	       tl br :inctl inctl :incbr incbr :rows rows :cols cols)))
     (with-current-buffer buf
       (insert (mapconcat 'identity rect "\n"))
       (goto-char (point-min)))
@@ -218,34 +223,27 @@ PRED returns nil when supplied with the key value as argument."
 ;; or returned separate lists (within main returned list)
 ;(extract-text (rect a b) ((rect a b :tl :br) (regex "foo") :TL "blah" :BR "foo"))
 
-(defun extract-keyword-bindings (args &optional check &rest keys)
+(defmacro extract-keyword-bindings (args &optional check &rest keys)
   "Extract KEYS and corresponding values from ARGS, and return in let-style bindings list.
 If ARGS is a symbol referring to a list, then KEYS and corresponding values will be removed from ARGS.
 If CHECK is non-nil then if there are any keys (beginning with :) in ARGS other than those in KEYS 
 an error will be thrown."
-  (let ((args2 (if (symbolp args) args 'args)))
-    (if check
-	(let* ((allkeys (-filter (lambda (x) (and (symbolp x)
-						  (string-match "^:" (symbol-name x))))
-				 (eval args2)))
-	       (unusedkeys (-difference allkeys keys)))
-	  (if unusedkeys
-	      (error "Keyword argument %s not one of %s" (car unusedkeys) keys))))
-    (cl-loop for key in keys
-	     collect (list (if (string-match "^:" (symbol-name key))
-			       (intern (substring (symbol-name key) 1))
-			     key)
-			   (extract-keyword-arg key args2)))))
-
-;; (defun set-keyword-bindings (lst)
-;;   ""
-;;   (dolist (pair lst)
-;;     (eval `(setq ,(car pair) ,(cadr pair)))
-;;     )
-;;   )
-
-;; (let ((lst '(1 2 3 :foo 1 :baa 2 :choo)))
-;;   (extract-keyword-bindings 'lst t :foo :baa))
+  (let ((args2 (gensym))
+	(args3 (gensym)))
+    `(let ((,args2 ,args)
+	   (,args3 (if (symbolp ,args) ,args ',args2)))
+       (if ,check
+	   (let* ((allkeys (-filter (lambda (x) (and (symbolp x)
+						     (string-match "^:" (symbol-name x))))
+				    (eval ,args3)))
+		  (unusedkeys (-difference allkeys ',keys)))
+	     (if unusedkeys
+		 (error "Keyword argument %s not one of %s" (car unusedkeys) ',keys))))
+       (cl-loop for key in ',keys
+		collect (list (if (string-match "^:" (symbol-name key))
+				  (intern (substring (symbol-name key) 1))
+				key)
+			      (extract-keyword-arg key ,args3))))))
 
 (defcustom extract-text-saved-wrappers nil
   "A list of wrapper functions that can be used with `extract-text'.
@@ -277,50 +275,55 @@ Each wrapper function should return a string or list of strings."
 If no :BUFFER or :STRING argument is supplied then the current buffer is used.
 SPECS should be a list of wrapper functions for extracting bits of text."
   ;; First set the string/buffer args
-  `(let* ,(let ((args2 args)) (extract-keyword-bindings 'args2 nil :string :buffer))
-     ;; scope in some wrapper functions
-     (cl-flet* ((regex (regexp &key startpos endpos noerror)
-		       (extract-matching-strings
-			regexp :startpos startpos :endpos endpos :noerror noerror))
-		(rect (tl br &key (inctl t) (incbr t) rows cols noerror join)
-		      (extract-matching-rectangle
-		       tl br :inctl inctl :incbr incbr :rows rows
-		       :cols cols :noerror noerror :join join))
-		,@(cl-loop for (name . code) in extract-text-saved-wrappers
-			   if (> (length code) 1)
-			   collect `(,name (,@(car code)) ,@(cdr code))
-			   else
-			   collect (list name nil code)))
-       ;; loop over the different extraction specifications
-       (cl-loop for spec in args
-		;; get args for specifying buffer restriction (if any)
-		collect (eval `(let ,(if (listp (car spec))
-					 ;; check for invalid keyword args when specification is a list of functions
-					 (extract-keyword-bindings 'spec t :REPS :TL :BR :INCTL :INCBR :ROWS :COLS)
-				       (extract-keyword-bindings 'spec nil :REPS :TL :BR :INCTL :INCBR :ROWS :COLS))
-				 ;; set defaults and get buffer containing text
-				 (let ((REPS (or REPS 1))
-				       (buf (or buffer (and string
-							    (generate-new-buffer "*extract from string*"))
-						(current-buffer)))
-				       results)
-				   (if string (with-current-buffer buf (insert string)))
-				   (with-current-buffer
-				       ;; execute the restriction (if any) specified by the TL, BR, etc. 
-				       (if (or TL BR)
-					   (copy-rectangle-to-buffer TL BR :inctl INCTL
-								     :incbr INCBR :rows ROWS :cols COLS :buffer buf)
-					 buf)
-				     (goto-char (point-min))
-				     ;; extract the text into results
-				     ;; repeat the extraction for REPS repeats
-				     (dotimes (i REPS results)
-				       (if (listp (car spec))
-					   ;; if we have a list of functions apply them in turn
-					   (cl-loop for func in spec
+  (let ((args2 args))
+    `(let* (,@(extract-keyword-bindings 'args2 nil :string :buffer)
+	    (buf (or buffer
+		     (and string (generate-new-buffer "*extract from string*"))
+		     (current-buffer)))
+	    allresults)
+       (if string (with-current-buffer buf (insert string)))
+       ;; scope in some wrapper functions
+       (cl-flet* ((regex (regexp &key startpos endpos noerror)
+			 (extract-matching-strings
+			  regexp :startpos startpos :endpos endpos :noerror noerror))
+		  (rect (tl br &key (inctl t) (incbr t) rows cols noerror join)
+			(extract-matching-rectangle
+			 tl br :inctl inctl :incbr incbr :rows rows
+			 :cols cols :noerror noerror :join join))
+		  ,@(cl-loop for (name . code) in extract-text-saved-wrappers
+			     if (> (length code) 1)
+			     collect `(,name (,@(car code)) ,@(cdr code))
+			     else
+			     collect (list name nil code)))
+	 ;; loop over the different extraction specifications
+	 ,@(cl-loop for spec in args2
+		    ;; get args for specifying buffer restriction (if any)
+		    collect `(let ,(if (listp (car spec))
+				       ;; check for invalid keyword args when specification is a list of functions
+				       (extract-keyword-bindings 'spec t :REPS :TL :BR :INCTL :INCBR :ROWS :COLS)
+				     (extract-keyword-bindings 'spec nil :REPS :TL :BR :INCTL :INCBR :ROWS :COLS))
+			       ;; set defaults and get buffer containing text
+			       (let ((REPS (or REPS 1))
+				     results)
+				 (with-current-buffer
+				     ;; execute the restriction (if any) specified by the TL, BR, etc. 
+				     (if (or TL BR)
+					 (with-current-buffer buf
+					   (goto-char (point-min))
+					   (copy-rectangle-to-buffer
+					    TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS))
+				       buf)
+				   (goto-char (point-min))
+				   ;; extract the text into results
+				   ;; repeat the extraction for REPS repeats
+				   (dotimes (i REPS results)
+				     ,(if (listp (car spec))
+					  ;; if we have a list of functions apply them in turn
+					  `(cl-loop for func in ,spec
 						    (setq results (append results (eval func))))
-					 ;; otherwise just apply a single function
-					 (setq results (append results (eval spec)))))))))))))
+					;; otherwise just apply a single function
+					`(setq results (append results ,spec)))))
+				 (setq allresults (cons results allresults)))))))))
 	       
 (provide 'extract-text)
 
