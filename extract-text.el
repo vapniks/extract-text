@@ -107,30 +107,38 @@ If any subexpression doesn't match then nil will be returned for that element."
 ;;;###autoload
 (cl-defun extract-matching-rectangle (tl br &key (inctl t) (incbr t) rows cols noerror join)
   "Extract a rectangle of text from the current buffer.
-The return value is a list of strings (the lines of the rectangle), or if :JOIN is non-nil
+The return value is a list of strings (the lines of the rectangle), or if JOIN is non-nil
 a single string formed by concatenating the rectangle lines with JOIN as a separator.
 
 The rectangle can be specified in several different ways:
 
- 1) By passing corner positions to :TL and :BR (see `extract-rectangle')
+ 1) By passing corner positions to TL and BR (see `extract-rectangle')
 
- 2) By passing numbers between 0 & 1 to :TL and :BR indicating corner positions as a 
+ 2) By passing numbers between 0 & 1 to TL and BR indicating corner positions as a 
     fraction of the buffer size, e.g. 0.5 represents the midpoint of the buffer
 
- 2) By passing regular expressions to :TL and :BR which match strings delimiting the
+ 2) By passing regular expressions to TL and BR which match strings delimiting the
     corner positions. If the regexp contains any non-shy subexpressions, the first one will 
     be used for determining the tl/br match.
     By default the matched strings will be included in the rectangle. To exclude the matched 
     tl/br text so the rectangle starts/ends after/before the matched text you must set 
-    :INCTL and/or :INCBR to nil (they are t by default).
+    INCTL and/or INCBR to nil (they are t by default).
 
- 3) By passing cons cells in the form (rep . regex) to :TL and :BR. In this case the
+ 3) By passing cons cells in the form (regex . rep) to TL and BR. In this case the
     rep'th match to regex will be used for the start/end position.
 
  4) By a mixture of the above methods.
 
- 5) By specifying just one of :TL or :BR (as a position, regexp, or cons cell), 
-    and also specifying the number of :COLS and :ROWS of the rectangle. 
+ 5) By specifying TL & BR using one of the above methods and setting COLS to t
+    in which case all columns of all lines between TL & BR will be included.
+    The return value will be all text between TL & BR split at newlines and
+    put into a list.
+
+ 6) By specifying TL & BR using one of the above methods and setting ROWS to t
+    in which case all rows of all columns between TL & BR will be included.
+
+ 5) By specifying just one of TL or BR (as a position, regexp, or cons cell), 
+    and also specifying the number of COLS and ROWS of the rectangle. 
     If COLS or ROWS is negative then the columns/rows are counted in the opposite 
     direction to normal, i.e. backwards from TL position or forwards from BR 
     position. This allows you to specify the rectangle from any corner position.
