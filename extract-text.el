@@ -132,7 +132,7 @@ The rectangle can be specified in several different ways:
  5) By specifying TL & BR using one of the above methods and setting COLS to t
     in which case all columns of all lines between TL & BR will be included.
     The return value will be all text between TL & BR split at newlines and
-    put into a list.
+    put into a list. Note: this is not necessarily a rectangle exactly.
 
  6) By specifying TL & BR using one of the above methods and setting ROWS to t
     in which case all rows of all columns between TL & BR will be included.
@@ -326,15 +326,15 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 				     (extract-keyword-bindings 'spec nil :REPS :TL :BR :INCTL :INCBR :ROWS :COLS))
 			       ;; set defaults and get buffer containing text
 			       (let ((REPS (or REPS 1))
+				     (buf2 (if (or TL BR)
+					       ;; execute the restriction (if any) specified by the TL, BR, etc. 
+					       (with-current-buffer buf
+						 (goto-char (point-min))
+						 (copy-rectangle-to-buffer
+						  TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS))
+					     buf))
 				     results)
-				 (with-current-buffer
-				     ;; execute the restriction (if any) specified by the TL, BR, etc. 
-				     (if (or TL BR)
-					 (with-current-buffer buf
-					   (goto-char (point-min))
-					   (copy-rectangle-to-buffer
-					    TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS))
-				       buf)
+				 (with-current-buffer buf2
 				   (goto-char (point-min))
 				   ;; extract the text into results
 				   ;; repeat the extraction for REPS repeats
@@ -345,6 +345,7 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 						    (setq results (append results (eval func))))
 					;; otherwise just apply a single function
 					`(setq results (append results ,spec)))))
+				 (if (or TL BR) (kill-buffer buf2))
 				 (setq allresults (cons results allresults)))))))))
 	       
 (provide 'extract-text)
