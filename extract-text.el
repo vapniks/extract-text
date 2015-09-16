@@ -292,6 +292,11 @@ Each wrapper function should return a string or list of strings."
                                        (sexp :tag "Default value")))
                          (repeat (sexp :tag "Expression"))))))
 
+(defcustom extract-text-max-reps 1000
+  "Maximum number of repetitions allowed when :REP arg is set to t in `extract-text' function."
+  :group 'extract-text
+  :type 'integer)
+
 (cl-defmacro extract-text (&rest args)
   "Extract text from :BUFFER or :STRING according to specifications in ARGS.
 If no :BUFFER or :STRING argument is supplied then the current buffer is used.
