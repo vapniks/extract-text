@@ -210,9 +210,9 @@ Return the new buffer.
 The arguments are the same as for `extract-matching-rectangle' apart from 
 NOERROR and JOIN which are not included. If no matching rectangle can be
 found an error will be thrown."
-  (let ((buf (generate-new-buffer " *extracted rectangle*"))
-	(rect (extract-matching-rectangle
-	       tl br :inctl inctl :incbr incbr :rows rows :cols cols)))
+  (let ((rect (extract-matching-rectangle
+	       tl br :inctl inctl :incbr incbr :rows rows :cols cols))
+	(buf (generate-new-buffer " *extracted rectangle*")))
     (with-current-buffer buf
       (insert (mapconcat 'identity rect "\n"))
       (goto-char (point-min)))
