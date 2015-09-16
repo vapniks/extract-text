@@ -334,17 +334,20 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 						  TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS))
 					     buf))
 				     results)
-				 (with-current-buffer buf2
-				   (goto-char (point-min))
-				   ;; extract the text into results
-				   ;; repeat the extraction for REPS repeats
-				   (dotimes (i REPS results)
-				     ,(if (listp (car spec))
-					  ;; if we have a list of functions apply them in turn
-					  `(cl-loop for func in ,spec
-						    (setq results (append results (eval func))))
-					;; otherwise just apply a single function
-					`(setq results (append results ,spec)))))
+				 (condition-case err
+				     (with-current-buffer buf2
+				       (goto-char (point-min))
+				       ;; extract the text into results
+				       ;; repeat the extraction for REPS repeats
+				       (dotimes (i REPS results)
+					 ,(if (listp (car spec))
+					      ;; if we have a list of functions apply them in turn
+					      `(cl-loop for func in ,spec
+							(setq results (append results (eval func))))
+					    ;; otherwise just apply a single function
+					    `(setq results (append results ,spec)))))
+				   (error (kill-buffer buf2)
+					  (signal (car err) (cdr err))))
 				 (if (or TL BR) (kill-buffer buf2))
 				 (setq allresults (cons results allresults)))))))))
 	       
