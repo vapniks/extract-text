@@ -306,8 +306,9 @@ SPECS should be a list of wrapper functions for extracting bits of text."
        (if string (with-current-buffer buf (insert string)))
        ;; scope in some wrapper functions
        (cl-flet* ((regex (regexp &key startpos endpos noerror)
-			 (extract-matching-strings
-			  regexp :startpos startpos :endpos endpos :noerror noerror))
+			 (let ((txt (extract-matching-strings
+				     regexp :startpos startpos :endpos endpos :noerror noerror)))
+			   (if (> (length txt) 1) (cdr txt) txt)))
 		  (rect (tl br &key (inctl t) (incbr t) rows cols noerror join)
 			(extract-matching-rectangle
 			 tl br :inctl inctl :incbr incbr :rows rows
@@ -349,7 +350,8 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 				   (error (if (or TL BR) (kill-buffer buf2))
 					  (signal (car err) (cdr err))))
 				 (if (or TL BR) (kill-buffer buf2))
-				 (setq allresults (cons results allresults)))))))))
+				 (setq allresults (cons results allresults))))))
+       (nreverse allresults))))
 	       
 (provide 'extract-text)
 
