@@ -346,7 +346,7 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 							(setq results (append results (eval func))))
 					    ;; otherwise just apply a single function
 					    `(setq results (append results ,spec)))))
-				   (error (kill-buffer buf2)
+				   (error (if (or TL BR) (kill-buffer buf2))
 					  (signal (car err) (cdr err))))
 				 (if (or TL BR) (kill-buffer buf2))
 				 (setq allresults (cons results allresults)))))))))
