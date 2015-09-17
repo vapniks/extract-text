@@ -319,14 +319,15 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 	    allresults)
        (if string (with-current-buffer buf (insert string)))
        ;; scope in some wrapper functions
-       (cl-flet* ((regex (regexp &key count reps noerror)
+       (cl-flet* ((regex (regexp &key count (reps 1) noerror)
 			 (let ((txt (extract-matching-strings
-				     regexp :count count :reps (or reps 1) :noerror noerror)))
-			   (if (> (length txt) 1) (cdr txt) txt)))
-		  (rect (tl br &key (inctl t) (incbr t) rows cols reps noerror join)
+				     regexp :count count :reps reps :noerror noerror))
+			       (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
+			   (if (listp (car txt)) (mapcar fn txt) (funcall fn txt))))
+		  (rect (tl br &key (inctl t) (incbr t) rows cols (reps 1) noerror join)
 			(extract-matching-rectangles
 			 tl br :inctl inctl :incbr incbr :rows rows
-			 :cols cols :reps (or reps 1) :noerror noerror :join join))
+			 :cols cols :reps reps :noerror noerror :join join))
 		  ,@(cl-loop for (name . code) in extract-text-saved-wrappers
 			     if (> (length code) 1)
 			     collect `(,name (,@(car code)) ,@(cdr code))
