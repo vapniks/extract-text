@@ -306,11 +306,6 @@ Each wrapper function should return a string or list of strings."
                                        (sexp :tag "Default value")))
                          (repeat (sexp :tag "Expression"))))))
 
-(defcustom extract-text-max-reps 1000
-  "Maximum number of repetitions allowed when :REP arg is set to t in `extract-text' function."
-  :group 'extract-text
-  :type 'integer)
-
 (cl-defmacro extract-text (&rest args)
   "Extract text from :BUFFER or :STRING according to specifications in ARGS.
 If no :BUFFER or :STRING argument is supplied then the current buffer is used.
@@ -342,12 +337,10 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 		    ;; get args for specifying buffer restriction (if any)
 		    collect `(let ,(if (listp (car spec))
 				       ;; check for invalid keyword args when specification is a list of functions
-				       (extract-keyword-bindings 'spec t :REPS :TL :BR :INCTL :INCBR :ROWS :COLS)
-				     (extract-keyword-bindings 'spec nil :REPS :TL :BR :INCTL :INCBR :ROWS :COLS))
+				       (extract-keyword-bindings 'spec t :REPS :NOERROR :TL :BR :INCTL :INCBR :ROWS :COLS)
+				     (extract-keyword-bindings 'spec nil :REPS :NOERROR :TL :BR :INCTL :INCBR :ROWS :COLS))
 			       ;; set defaults and get buffer containing text
-			       (let* ((untilerror (eq REPS t))
-				      (REPS (if untilerror extract-text-max-reps
-					      (or REPS 1)))
+			       (let* ((REPS (or REPS 1))
 				      (buf2 (if (or TL BR)
 						;; execute the restriction (if any) specified by the TL, BR, etc. 
 						(with-current-buffer buf
@@ -369,8 +362,7 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 					    ;; otherwise just apply a single function
 					     `((setq results (append results ,spec))))))
 				   (error (if (or TL BR) (kill-buffer buf2))
-					  (unless untilerror
-					    (signal (car err) (cdr err)))))
+					  (unless NOERROR (signal (car err) (cdr err)))))
 				 (if (or TL BR) (kill-buffer buf2))
 				 (setq allresults (cons results allresults))))))
        (reverse allresults))))
