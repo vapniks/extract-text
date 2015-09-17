@@ -105,10 +105,11 @@ If any subexpression doesn't match then nil will be returned for that element."
       (match-strings-no-properties regexp)))
 
 ;;;###autoload
-(cl-defun extract-matching-rectangle (tl br &key (inctl t) (incbr t) rows cols noerror join)
-  "Extract a rectangle of text from the current buffer.
-The return value is a list of strings (the lines of the rectangle), or if JOIN is non-nil
-a single string formed by concatenating the rectangle lines with JOIN as a separator.
+(cl-defun extract-matching-rectangles (tl br &key (inctl t) (incbr t) rows cols (reps 1) noerror join)
+  "Extract rectangle(s) of text from the current buffer.
+The return value is a list of strings (the lines of the rectangle), or a list of such lists if REPS is > 1. 
+If JOIN is non-nil then the lines of each rectangle will be joined together with JOIN as a separator,
+ and returned as single strings.
 
 The rectangle can be specified in several different ways:
 
@@ -143,7 +144,11 @@ The rectangle can be specified in several different ways:
     direction to normal, i.e. backwards from TL position or forwards from BR 
     position. This allows you to specify the rectangle from any corner position.
 
-If no matching rectangle is found then an error is thrown unless :NOERROR is non-nil."
+When REPS > 1 rectangles are extracted sequentially, with the search for the next rectangle
+starting from the end of the previous rectangle.
+If no matching rectangle is found then an error is thrown unless :NOERROR is non-nil 
+in which case the rectangles found so far are returned (if none were found then nil is
+returned)."
   ;; check we have the required arguments
   (if (not (and (or tl br)
 		(or (and tl br)
@@ -151,14 +156,12 @@ If no matching rectangle is found then an error is thrown unless :NOERROR is non
       (error "Missing :tl/:br or :cols & :rows arguments"))
   ;; find tl & br positions
   (cl-flet* ((search (regex matchfun count) ;function to find position by regexp
-		     (if (re-search-forward regex nil t count)
-			 (if (match-string 1)
-			     (funcall matchfun 1)
-			   (funcall matchfun 0))
-		       (if noerror 'nomatch
-			 (error "Unable to match regex: %s" regex))))
-	     (getpos (arg matchfn)
-		     (cond
+		     (re-search-forward regex nil nil count)
+		     (if (match-string 1)
+			 (funcall matchfun 1)
+		       (funcall matchfun 0)))
+	     (getpos (arg matchfn) ;function to get position given tl/br arg
+		     (cond     ;and match-beginning/match-end function
 		      ((integerp arg) arg)
 		      ((and (numberp arg) (<= arg 1) (>= arg 0))
 		       (round (* arg (- (point-max) (point-min)))))
@@ -181,28 +184,36 @@ If no matching rectangle is found then an error is thrown unless :NOERROR is non
 			(let ((col (current-column)))
 			  (goto-char (if type (point-min) (point-max)))
 			  (move-to-column col t)
-			  (point)))))
-    (let ((tl2 (getpos tl (if inctl 'match-beginning 'match-end)))
-	  (br2 (getpos br (if incbr 'match-end 'match-beginning))))
-      (unless (memq 'nomatch (list tl2 br2))
-	(let ((txt (cond
-		    ((and tl2 br2 (eq cols t))
-		     (split-string (buffer-substring-no-properties tl2 br2) "\n"))
-		    ((and tl2 br2 (eq rows t))
-		     (extract-rectangle (adjust2 tl2 t) (adjust2 br2 nil)))
-		    ((and tl2 br2) (extract-rectangle tl2 br2))
-		    ((and (or tl2 br2) rows cols)
-		     (extract-rectangle (or tl2 (adjust1 br2 t))
-					(or br2 (adjust1 tl2 nil)))))))
-	  (if join (mapconcat 'identity txt join) txt))))))
+			  (point))))
+	     (getrect (tl2 br2)	;function to get the rectangle given start and end positions
+		      (cond
+		       ((and tl2 br2 (eq cols t))
+			(split-string (buffer-substring-no-properties tl2 br2) "\n"))
+		       ((and tl2 br2 (eq rows t))
+			(extract-rectangle (adjust2 tl2 t) (adjust2 br2 nil)))
+		       ((and tl2 br2) (extract-rectangle tl2 br2))
+		       ((and (or tl2 br2) rows cols)
+			(extract-rectangle (or tl2 (adjust1 br2 t))
+					   (or br2 (adjust1 tl2 nil)))))))
+    (let (results)
+      (condition-case err
+	  (dotimes (i reps)
+	    (let ((tl2 (getpos tl (if inctl 'match-beginning 'match-end)))
+		  (br2 (getpos br (if incbr 'match-end 'match-beginning))))
+	      (unless (memq 'nomatch (list tl2 br2))
+		(let ((txt (getrect tl2 br2)))
+		  (setq results (cons (if join (mapconcat 'identity txt join) txt)
+				      results))))))
+	(error (unless noerror (signal (car err) (cdr err)))))
+      (if (> reps 1) (reverse results) (car results)))))
 
 (cl-defun copy-rectangle-to-buffer (tl br &key (inctl t) (incbr t) rows cols)
   "Copy a rectangular region of the current buffer to a new buffer.
 Return the new buffer.
-The arguments are the same as for `extract-matching-rectangle' apart from 
-NOERROR and JOIN which are not included. If no matching rectangle can be
+The arguments are the same as for `extract-matching-rectangles' apart from 
+REPS, NOERROR and JOIN which are not included. If no matching rectangle can be
 found an error will be thrown."
-  (let ((rect (extract-matching-rectangle
+  (let ((rect (extract-matching-rectangles
 	       tl br :inctl inctl :incbr incbr :rows rows :cols cols))
 	(buf (generate-new-buffer " *extracted rectangle*")))
     (with-current-buffer buf
@@ -307,7 +318,7 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 				     regexp :startpos startpos :endpos endpos :noerror noerror)))
 			   (if (> (length txt) 1) (cdr txt) txt)))
 		  (rect (tl br &key (inctl t) (incbr t) rows cols noerror join)
-			(extract-matching-rectangle
+			(extract-matching-rectangles
 			 tl br :inctl inctl :incbr incbr :rows rows
 			 :cols cols :noerror noerror :join join))
 		  ,@(cl-loop for (name . code) in extract-text-saved-wrappers
@@ -351,7 +362,7 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 					    (signal (car err) (cdr err)))))
 				 (if (or TL BR) (kill-buffer buf2))
 				 (setq allresults (cons results allresults))))))
-       (nreverse allresults))))
+       (reverse allresults))))
 	       
 (provide 'extract-text)
 
