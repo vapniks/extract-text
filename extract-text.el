@@ -90,19 +90,27 @@ be the string searched."
 	   collect (match-string-no-properties i str)))
 
 ;;;###autoload
-(cl-defun extract-matching-strings (regexp &key startpos endpos (reps 1) noerror)
+(cl-defun extract-matching-strings (regexp &key count startpos endpos (reps 1) noerror)
   "Extract strings from current buffer that match subexpressions of REGEXP.
+If COUNT is supplied use the COUNT'th match of REGEXP.
+Repeat the extraction REPS times (default once). If REP > 1 then a list of 
+lists will be returned, otherwise a single list is returned whose first element
+is the entire match, and whose subsequent elements are the matches to the 
+subexpressions of REGEXP (in order).
 If STARTPOS is supplied searching starts at that buffer position, otherwise it
 starts from the current position. If ENDPOS is supplied then any matches must
 occur before that position.
 By default if no match is found then an error is thrown, unless NOERROR is 
-non-nil in which case nil is returned.
-The return value is a list whose first element is the entire match, and whose 
-subsequent elements are the matches to subexpressions of REGEXP (in order).
+non-nil in which case a list of the matches found so far (if any) is returned.
 If any subexpression doesn't match then nil will be returned for that element."
   (if startpos (goto-char startpos))
-  (if (re-search-forward regexp endpos noerror)
-      (match-strings-no-properties regexp)))
+  (let (results)
+    (condition-case err
+	(dotimes (i reps)
+	  (if (re-search-forward regexp endpos noerror count)
+	      (setq results (cons (match-strings-no-properties regexp) results))))
+      (error (unless noerror (signal (car err) (cdr err)))))
+    (if (> reps 1) (reverse results) (car results))))
 
 ;;;###autoload
 (cl-defun extract-matching-rectangles (tl br &key (inctl t) (incbr t) rows cols (reps 1) noerror join)
@@ -316,13 +324,14 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 	    allresults)
        (if string (with-current-buffer buf (insert string)))
        ;; scope in some wrapper functions
-       (cl-flet* ((regex (regexp &key noerror)
-			 (let ((txt (extract-matching-strings regexp :noerror noerror)))
+       (cl-flet* ((regex (regexp &key count reps noerror)
+			 (let ((txt (extract-matching-strings
+				     regexp :count count :reps reps :noerror noerror)))
 			   (if (> (length txt) 1) (cdr txt) txt)))
-		  (rect (tl br &key (inctl t) (incbr t) rows cols noerror join)
+		  (rect (tl br &key (inctl t) (incbr t) rows cols reps noerror join)
 			(extract-matching-rectangles
 			 tl br :inctl inctl :incbr incbr :rows rows
-			 :cols cols :noerror noerror :join join))
+			 :cols cols :reps reps :noerror noerror :join join))
 		  ,@(cl-loop for (name . code) in extract-text-saved-wrappers
 			     if (> (length code) 1)
 			     collect `(,name (,@(car code)) ,@(cdr code))
