@@ -61,7 +61,7 @@
 
 ;;; Require
 (eval-when-compile (require 'cl))
-(require 'macro-utils)
+(require 'dash)
 
 ;;; Code:
 
