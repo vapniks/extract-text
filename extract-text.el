@@ -216,7 +216,8 @@ The arguments are the same as for `extract-matching-rectangles' apart from
 REPS, NOERROR and JOIN which are not included. If no matching rectangle can be
 found an error will be thrown."
   (let ((rect (extract-matching-rectangles
-	       tl br :inctl inctl :incbr incbr :rows rows :cols cols))
+	       tl br :inctl inctl :incbr incbr :rows rows
+	       :cols cols :reps 1 :noerror nil :join nil))
 	(buf (generate-new-buffer " *extracted rectangle*")))
     (with-current-buffer buf
       (insert (mapconcat 'identity rect "\n"))
