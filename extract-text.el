@@ -150,48 +150,40 @@ If no matching rectangle is found then an error is thrown unless :NOERROR is non
 		    (and rows cols))))
       (error "Missing :tl/:br or :cols & :rows arguments"))
   ;; find tl & br positions
-  (cl-flet ((search (regex matchfun count) ;function to find position by regexp
-		    (if (re-search-forward regex nil t count)
-			(if (match-string 1)
-			    (funcall matchfun 1)
-			  (funcall matchfun 0))
-		      (if noerror 'nomatch
-			(error "Unable to match regex: %s" regex))))
-	    (adjust1 (begin type)	;function to find missing tl/br value, based on rows & cols args
-		    (save-excursion	;BEGIN is position of non-missing end (br/tl)
-		      (goto-char begin)	;TYPE is t if we have br but need tl and nil if we have tl but need br
-		      (let ((col (current-column)))
-			(forward-line (if type (- 1 rows) (- rows 1)))
-			(move-to-column (if type (- col (1- cols))
-					  (+ col (1- cols))) t)
-			(point))))
-	    (adjust2 (pos type)		;function finds position in same column as POS, but in first/last row
-		     (save-excursion	;depending on whether TYPE is non-nil/nil
-		       (goto-char pos)	;(used when ROW arg is t to get rectangle spanning all rows)
-		       (let ((col (current-column)))
-			 (goto-char (if type (point-min) (point-max)))
-			 (move-to-column col t)
-			 (point)))))
-    (let* ((tlmatch (if inctl 'match-beginning 'match-end))
-	   (brmatch (if incbr 'match-end 'match-beginning))
-	   (tl2 (cond
-		 ((integerp tl) tl)
-		 ((and (numberp tl) (<= tl 1) (>= tl 0))
-		  (round (* tl (- (point-max) (point-min)))))
-		 ((stringp tl) (search tl tlmatch nil))
-		 ((and (listp tl)
-		       (stringp (car tl))
-		       (integerp (cdr tl)))
-		  (search (car tl) tlmatch (cdr tl)))))
-	   (br2 (cond
-		 ((integerp br) br)
-		 ((and (numberp br) (<= br 1) (>= br 0))
-		  (round (* br (- (point-max) (point-min)))))
-		 ((stringp br) (search br brmatch nil))
-		 ((and (listp br)
-		       (stringp (car br))
-		       (integerp (cdr br)))
-		  (search (car br) brmatch (cdr br))))))
+  (cl-flet* ((search (regex matchfun count) ;function to find position by regexp
+		     (if (re-search-forward regex nil t count)
+			 (if (match-string 1)
+			     (funcall matchfun 1)
+			   (funcall matchfun 0))
+		       (if noerror 'nomatch
+			 (error "Unable to match regex: %s" regex))))
+	     (getpos (arg matchfn)
+		     (cond
+		      ((integerp arg) arg)
+		      ((and (numberp arg) (<= arg 1) (>= arg 0))
+		       (round (* arg (- (point-max) (point-min)))))
+		      ((stringp arg) (search arg matchfn nil))
+		      ((and (listp arg)
+			    (stringp (car arg))
+			    (integerp (cdr arg)))
+		       (search (car arg) matchfn (cdr arg)))))
+	     (adjust1 (begin type) ;function to find missing tl/br value, based on rows & cols args
+		      (save-excursion ;BEGIN is position of non-missing end (br/tl)
+			(goto-char begin) ;TYPE is t if we have br but need tl and nil if we have tl but need br
+			(let ((col (current-column)))
+			  (forward-line (if type (- 1 rows) (- rows 1)))
+			  (move-to-column (if type (- col (1- cols))
+					    (+ col (1- cols))) t)
+			  (point))))
+	     (adjust2 (pos type) ;function finds position in same column as POS, but in first/last row
+		      (save-excursion ;depending on whether TYPE is non-nil/nil
+			(goto-char pos)	;(used when ROW arg is t to get rectangle spanning all rows)
+			(let ((col (current-column)))
+			  (goto-char (if type (point-min) (point-max)))
+			  (move-to-column col t)
+			  (point)))))
+    (let ((tl2 (getpos tl (if inctl 'match-beginning 'match-end)))
+	  (br2 (getpos br (if incbr 'match-end 'match-beginning))))
       (unless (memq 'nomatch (list tl2 br2))
 	(let ((txt (cond
 		    ((and tl2 br2 (eq cols t))
@@ -331,15 +323,17 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 				       (extract-keyword-bindings 'spec t :REPS :TL :BR :INCTL :INCBR :ROWS :COLS)
 				     (extract-keyword-bindings 'spec nil :REPS :TL :BR :INCTL :INCBR :ROWS :COLS))
 			       ;; set defaults and get buffer containing text
-			       (let ((REPS (or REPS 1))
-				     (buf2 (if (or TL BR)
-					       ;; execute the restriction (if any) specified by the TL, BR, etc. 
-					       (with-current-buffer buf
-						 (goto-char (point-min))
-						 (copy-rectangle-to-buffer
-						  TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS))
-					     buf))
-				     results)
+			       (let* ((untilerror (eq REPS t))
+				      (REPS (if untilerror extract-text-max-reps
+					      (or REPS 1)))
+				      (buf2 (if (or TL BR)
+						;; execute the restriction (if any) specified by the TL, BR, etc. 
+						(with-current-buffer buf
+						  (goto-char (point-min))
+						  (copy-rectangle-to-buffer
+						   TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS))
+					      buf))
+				      results)
 				 (condition-case err
 				     (with-current-buffer buf2
 				       (goto-char (point-min))
@@ -353,7 +347,8 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 					    ;; otherwise just apply a single function
 					     `((setq results (append results ,spec))))))
 				   (error (if (or TL BR) (kill-buffer buf2))
-					  (signal (car err) (cdr err))))
+					  (unless untilerror
+					    (signal (car err) (cdr err)))))
 				 (if (or TL BR) (kill-buffer buf2))
 				 (setq allresults (cons results allresults))))))
        (nreverse allresults))))
