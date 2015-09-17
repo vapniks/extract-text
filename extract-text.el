@@ -144,8 +144,10 @@ The rectangle can be specified in several different ways:
     direction to normal, i.e. backwards from TL position or forwards from BR 
     position. This allows you to specify the rectangle from any corner position.
 
-When REPS > 1 rectangles are extracted sequentially, with the search for the next rectangle
-starting from the end of the previous rectangle.
+When REPS > 1 rectangles are extracted sequentially (using the same parameters), 
+with the search for the next rectangle starting from the end of the previous rectangle.
+This only makes sense when TL and/or BR are regexp's as otherwise all the rectangles
+will be identical.
 If no matching rectangle is found then an error is thrown unless :NOERROR is non-nil 
 in which case the rectangles found so far are returned (if none were found then nil is
 returned)."
