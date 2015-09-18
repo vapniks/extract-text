@@ -228,7 +228,7 @@ REPS, NOERROR and JOIN which are not included. If no matching rectangle can be
 found an error will be thrown."
   (let ((rect (extract-matching-rectangles
 	       tl br :inctl inctl :incbr incbr :rows rows
-	       :cols cols :reps 1 :noerror nil :join nil))
+	       :cols cols :reps 1 :noerror nil :join t))
 	(buf (generate-new-buffer " *extracted rectangle*")))
     (with-current-buffer buf
       (insert (mapconcat 'identity rect "\n"))
@@ -341,8 +341,8 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 		    ;; get args for specifying buffer restriction (if any)
 		    collect `(let ,(if (listp (car spec))
 				       ;; check for invalid keyword args when specification is a list of functions
-				       (extract-keyword-bindings 'spec t :REPS :NOERROR :TL :BR :INCTL :INCBR :ROWS :COLS)
-				     (extract-keyword-bindings 'spec nil :REPS :NOERROR :TL :BR :INCTL :INCBR :ROWS :COLS))
+				       (extract-keyword-bindings 'spec t :REPS :NOERROR :TL :BR :INCTL :INCBR :ROWS :COLS :JOIN)
+				     (extract-keyword-bindings 'spec nil :REPS :NOERROR :TL :BR :INCTL :INCBR :ROWS :COLS :JOIN))
 			       ;; set defaults and get buffer containing text
 			       (let* ((REPS (or REPS 1))
 				      (buf2 (if (or TL BR)
@@ -358,15 +358,17 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 				       (goto-char (point-min))
 				       ;; extract the text into results
 				       ;; repeat the extraction for REPS repeats
-				       (dotimes (i REPS results)
-					 ,@(if (listp (car spec))
-					      ;; if we have a list of functions apply them in turn
-					      (cl-loop for func in spec
-						       collect `(setq results (append results ,func)))
-					    ;; otherwise just apply a single function
-					     `((setq results (append results ,spec))))))
-				   (error (if (or TL BR) (kill-buffer buf2))
-					  (unless NOERROR (signal (car err) (cdr err)))))
+				       (dotimes (i REPS)
+					 ,(if (listp (car spec))
+					       ;; if we have a list of functions apply them in turn
+					       ,@(cl-loop for func in spec
+							collect
+							`(setq results (cons ,func results)))
+					     ;; otherwise just apply a single function
+					     `(setq results (cons ,spec results)))))
+				   (error (unless NOERROR
+					    (if (or TL BR) (kill-buffer buf2))
+					    (signal (car err) (cdr err)))))
 				 (if (or TL BR) (kill-buffer buf2))
 				 (setq allresults (cons results allresults))))))
        (reverse allresults))))
