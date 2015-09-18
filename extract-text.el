@@ -251,17 +251,6 @@ PRED returns nil when supplied with the key value as argument."
 	       (error "Invalid value for %S" ,key)
 	     val))))))
  
-;; plan call above functions after copying required rectangle into separate buffer
-;; limits of rectangle are defined by regexp/position/percentage args top bottom left right
-;; or maybe just min & max args to main function. 
-;; Better to do it this way (copying rectangle to a temp buffer), since otherwise we have
-;; problems when the regexp matches partly inside the required box and partly outside
-
-;; how to specify repetition until no match?? Use t value for :rep arg
-;; allow :join or :sep arg to specify whether output from specs in list should be joined into single list
-;; or returned separate lists (within main returned list)
-;(extract-text (rect a b) ((rect a b :tl :br) (regex "foo") :TL "blah" :BR "foo"))
-
 (defmacro extract-keyword-bindings (args &optional check &rest keys)
   "Extract KEYS and corresponding values from ARGS, and return in let-style bindings list.
 If ARGS is a symbol referring to a list, then KEYS and corresponding values will be removed from ARGS.
@@ -284,7 +273,7 @@ an error will be thrown."
 				key)
 			      (extract-keyword-arg key ,args3))))))
 
-(defcustom extract-text-saved-wrappers nil
+(defcustom extract-text-wrappers nil
   "A list of wrapper functions that can be used with `extract-text'.
 Each element has the form (NAME ARGLIST EXPRESSION [EXPRESSION ...]),
 and represents a function which extracts text from the current buffer
@@ -331,7 +320,7 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 			(extract-matching-rectangles
 			 tl br :inctl inctl :incbr incbr :rows rows
 			 :cols cols :reps reps :noerror noerror :join join))
-		  ,@(cl-loop for (name . code) in extract-text-saved-wrappers
+		  ,@(cl-loop for (name . code) in extract-text-wrappers
 			     if (> (length code) 1)
 			     collect `(,name (,@(car code)) ,@(cdr code))
 			     else
@@ -359,13 +348,13 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 				       ;; extract the text into results
 				       ;; repeat the extraction for REPS repeats
 				       (dotimes (i REPS)
-					 ,(if (listp (car spec))
+					 ,@(if (listp (car spec))
 					       ;; if we have a list of functions apply them in turn
-					       ,@(cl-loop for func in spec
+					       (cl-loop for func in spec
 							collect
 							`(setq results (cons ,func results)))
 					     ;; otherwise just apply a single function
-					     `(setq results (cons ,spec results)))))
+					     `((setq results (cons ,spec results))))))
 				   (error (unless NOERROR
 					    (if (or TL BR) (kill-buffer buf2))
 					    (signal (car err) (cdr err)))))
