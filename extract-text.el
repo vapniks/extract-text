@@ -90,13 +90,14 @@ be the string searched."
 	   collect (match-string-no-properties i str)))
 
 ;;;###autoload
-(cl-defun extract-matching-strings (regexp &key count startpos endpos (reps 1) noerror)
+(cl-defun extract-matching-strings (regexp &key count startpos endpos (reps 1) noerror join)
   "Extract strings from current buffer that match subexpressions of REGEXP.
 If COUNT is supplied use the COUNT'th match of REGEXP.
-Repeat the extraction REPS times (default once). If REP > 1 then a list of 
-lists will be returned, otherwise a single list is returned whose first element
-is the entire match, and whose subsequent elements are the matches to the 
-subexpressions of REGEXP (in order).
+Repeat the extraction REPS times (default once). 
+Unless JOIN is non-nil a list of lists will be returned, one for each repetition.
+Each list contains the whole match followed by matches to subexpressions of REGEXP (in order).
+If JOIN is non-nil the lists will be joined into a single list.
+
 If STARTPOS is supplied searching starts at that buffer position, otherwise it
 starts from the current position. If ENDPOS is supplied then any matches must
 occur before that position.
@@ -110,14 +111,15 @@ If any subexpression doesn't match then nil will be returned for that element."
 	  (if (re-search-forward regexp endpos noerror count)
 	      (setq results (cons (match-strings-no-properties regexp) results))))
       (error (unless noerror (signal (car err) (cdr err)))))
-    (if (> reps 1) (reverse results) (car results))))
+    (if join (-flatten (reverse results)) (reverse results))))
 
 ;;;###autoload
 (cl-defun extract-matching-rectangles (tl br &key (inctl t) (incbr t) rows cols (reps 1) noerror join)
   "Extract rectangle(s) of text from the current buffer.
 The return value is a list of strings (the lines of the rectangle), or a list of such lists if REPS is > 1. 
-If JOIN is non-nil then the lines of each rectangle will be joined together with JOIN as a separator,
- and returned as single strings.
+If JOIN is a string then the lines of each rectangle will be joined together with JOIN as a separator,
+ and returned as a list of single strings. If JOIN is non-nil but not a string then the rectangle lists
+will be joined together into a single list.
 
 The rectangle can be specified in several different ways:
 
@@ -210,12 +212,13 @@ returned)."
 	  (dotimes (i reps)
 	    (let ((tl2 (getpos tl (if inctl 'match-beginning 'match-end)))
 		  (br2 (getpos br (if incbr 'match-end 'match-beginning))))
-	      (unless (memq 'nomatch (list tl2 br2))
-		(let ((txt (getrect tl2 br2)))
-		  (setq results (cons (if join (mapconcat 'identity txt join) txt)
-				      results))))))
+	      (let ((txt (getrect tl2 br2)))
+		(setq results (cond
+			       ((stringp join) (cons (mapconcat 'identity txt join) results))
+			       (join (append txt results))
+			       ((null join) (cons txt results)))))))
 	(error (unless noerror (signal (car err) (cdr err)))))
-      (if (> reps 1) (reverse results) (car results)))))
+      (if (> reps 1) (reverse results) results))))
 
 (cl-defun copy-rectangle-to-buffer (tl br &key (inctl t) (incbr t) rows cols)
   "Copy a rectangular region of the current buffer to a new buffer.
@@ -319,9 +322,9 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 	    allresults)
        (if string (with-current-buffer buf (insert string)))
        ;; scope in some wrapper functions
-       (cl-flet* ((regex (regexp &key count (reps 1) noerror)
+       (cl-flet* ((regex (regexp &key count (reps 1) noerror join)
 			 (let ((txt (extract-matching-strings
-				     regexp :count count :reps reps :noerror noerror))
+				     regexp :count count :reps reps :noerror noerror :join join))
 			       (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
 			   (if (listp (car txt)) (mapcar fn txt) (funcall fn txt))))
 		  (rect (tl br &key (inctl t) (incbr t) rows cols (reps 1) noerror join)
