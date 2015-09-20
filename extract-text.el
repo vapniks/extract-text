@@ -93,17 +93,14 @@ be the string searched."
 (cl-defun extract-matching-strings (regexp &key count startpos endpos noerror)
   "Extract strings from current buffer that match subexpressions of REGEXP.
 If COUNT is supplied use the COUNT'th match of REGEXP.
-Repeat the extraction REPS times (default once). 
-Unless JOIN is non-nil a list of lists will be returned, one for each repetition.
-Each list contains the whole match followed by matches to subexpressions of REGEXP (in order).
-If JOIN is non-nil the lists will be joined into a single list.
+The returned list contains the whole match followed by matches to subexpressions 
+of REGEXP (in order).
 
 If STARTPOS is supplied searching starts at that buffer position, otherwise it
-starts from the current position. If ENDPOS is supplied then any matches must
+starts from the current position. If ENDPOS is supplied the the match must
 occur before that position.
 By default if no match is found then an error is thrown, unless NOERROR is 
-non-nil in which case a list of the matches found so far (if any) is returned.
-If any subexpression doesn't match then nil will be returned for that element."
+non-nil in which case nil will be returned."
   (if startpos (goto-char startpos))
   (if (re-search-forward regexp endpos noerror count)
       (match-strings-no-properties regexp)))
