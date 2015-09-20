@@ -90,7 +90,7 @@ be the string searched."
 	   collect (match-string-no-properties i str)))
 
 ;;;###autoload
-(cl-defun extract-matching-strings (regexp &key count startpos endpos (reps 1) noerror join)
+(cl-defun extract-matching-strings (regexp &key count startpos endpos noerror)
   "Extract strings from current buffer that match subexpressions of REGEXP.
 If COUNT is supplied use the COUNT'th match of REGEXP.
 Repeat the extraction REPS times (default once). 
@@ -105,13 +105,8 @@ By default if no match is found then an error is thrown, unless NOERROR is
 non-nil in which case a list of the matches found so far (if any) is returned.
 If any subexpression doesn't match then nil will be returned for that element."
   (if startpos (goto-char startpos))
-  (let (results)
-    (condition-case err
-	(dotimes (i reps)
-	  (if (re-search-forward regexp endpos noerror count)
-	      (setq results (cons (match-strings-no-properties regexp) results))))
-      (error (unless noerror (signal (car err) (cdr err)))))
-    (if join (-flatten (reverse results)) (reverse results))))
+  (if (re-search-forward regexp endpos noerror count)
+      (match-strings-no-properties regexp)))
 
 ;;;###autoload
 (cl-defun extract-matching-rectangles (tl br &key (inctl t) (incbr t) rows cols (reps 1) noerror join)
@@ -306,9 +301,9 @@ ARGS should be a list of wrapper functions for extracting bits of text."
     `(let* (,@(extract-keyword-bindings 'args2 nil :buffer)
 	    (buf (or buffer (current-buffer))))
        ;; scope in some wrapper functions
-       (cl-flet* ((regex (regexp &key count (reps 1) noerror join)
+       (cl-flet* ((regex (regexp &key count noerror)
 			 (let ((txt (extract-matching-strings
-				     regexp :count count :reps reps :noerror noerror :join join))
+				     regexp :count count :noerror noerror))
 			       (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
 			   (if (listp (car txt)) (mapcar fn txt) (funcall fn txt))))
 		  (rect (tl br &key (inctl t) (incbr t) rows cols (reps 1) noerror join)
