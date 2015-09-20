@@ -299,17 +299,12 @@ Each wrapper function should return a string or list of strings."
                          (repeat (sexp :tag "Expression"))))))
 
 (cl-defmacro extract-text (&rest args)
-  "Extract text from :BUFFER or :STRING according to specifications in ARGS.
-If no :BUFFER or :STRING argument is supplied then the current buffer is used.
-SPECS should be a list of wrapper functions for extracting bits of text."
-  ;; First set the string/buffer args
+  "Extract text from current-buffer or BUFFER according to specifications in ARGS.
+ARGS should be a list of wrapper functions for extracting bits of text."
   (let ((args2 args))
-    `(let* (,@(extract-keyword-bindings 'args2 nil :string :buffer)
-	    (buf (or buffer
-		     (and string (generate-new-buffer "*extract from string*"))
-		     (current-buffer)))
-	    allresults)
-       (if string (with-current-buffer buf (insert string)))
+    ;; First set the buffer
+    `(let* (,@(extract-keyword-bindings 'args2 nil :buffer)
+	    (buf (or buffer (current-buffer))))
        ;; scope in some wrapper functions
        (cl-flet* ((regex (regexp &key count (reps 1) noerror join)
 			 (let ((txt (extract-matching-strings
@@ -325,43 +320,40 @@ SPECS should be a list of wrapper functions for extracting bits of text."
 			     collect `(,name (,@(car code)) ,@(cdr code))
 			     else
 			     collect (list name nil code)))
-	 ;; loop over the different extraction specifications
-	 ,@(cl-loop for spec in args2
-		    ;; get args for specifying buffer restriction (if any)
-		    collect `(let ,(if (listp (car spec))
-				       ;; check for invalid keyword args when specification is a list of functions
-				       (extract-keyword-bindings 'spec t :REPS :NOERROR :TL :BR :INCTL :INCBR :ROWS :COLS :JOIN)
-				     (extract-keyword-bindings 'spec nil :REPS :NOERROR :TL :BR :INCTL :INCBR :ROWS :COLS :JOIN))
-			       ;; set defaults and get buffer containing text
-			       (let* ((REPS (or REPS 1))
-				      (buf2 (if (or TL BR)
-						;; execute the restriction (if any) specified by the TL, BR, etc. 
-						(with-current-buffer buf
-						  (goto-char (point-min))
-						  (copy-rectangle-to-buffer
-						   TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS))
-					      buf))
-				      results)
-				 (condition-case err
-				     (with-current-buffer buf2
-				       (goto-char (point-min))
-				       ;; extract the text into results
-				       ;; repeat the extraction for REPS repeats
-				       (dotimes (i REPS)
-					 ,@(if (listp (car spec))
-					       ;; if we have a list of functions apply them in turn
-					       (cl-loop for func in spec
-							collect
-							`(setq results (cons ,func results)))
-					     ;; otherwise just apply a single function
-					     `((setq results (cons ,spec results))))))
-				   (error (unless NOERROR
+	 (cl-macrolet ((recurse
+			(args3)
+			`(list
+			  ,@(cl-loop for spec in args3
+				     collect
+				     (if (not (and (listp spec) (listp (car spec)))) spec
+				       ;; get args for specifying buffer restriction (if any)
+				       `(let ,(extract-keyword-bindings
+					       'spec t :REPS :NOERROR :TL :BR :INCTL :INCBR :ROWS :COLS :FLATTEN)
+					  ;; set defaults and get buffer containing text
+					  (let* ((REPS (or REPS 1))
+						 (FLATTEN (cond ((numberp FLATTEN) FLATTEN) (FLATTEN 1)))
+						 (buf2 (if (not (or TL BR)) (current-buffer)
+							 ;; execute the restriction (if any) specified by the TL, BR, etc. 
+							 (goto-char (point-min))
+							 (copy-rectangle-to-buffer
+							  TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS)))
+						 results)
+					    ;; check for errors, and ignore them if NOERROR is non-nil
+					    (condition-case err
+						(setq results
+						      (with-current-buffer buf2
+							;; repeat the extraction for REPS repeats
+							(if (equal REPS 1) (testmacro ,spec)
+							  (cl-loop for i from 1 to REPS
+								   ;; extract the text into results
+								   collect (testmacro ,spec)))))
+					      (error (unless NOERROR
+						       (if (or TL BR) (kill-buffer buf2))
+						       (signal (car err) (cdr err)))))
 					    (if (or TL BR) (kill-buffer buf2))
-					    (signal (car err) (cdr err)))))
-				 (if (or TL BR) (kill-buffer buf2))
-				 (setq allresults (cons results allresults))))))
-       (reverse allresults))))
-	       
+					    (if FLATTEN (-flatten-n FLATTEN results) results))))))))
+	   (with-current-buffer buf (goto-char (point-min)) (recurse ,args2)))))))
+
 (provide 'extract-text)
 
 ;; (magit-push)
