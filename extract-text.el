@@ -291,38 +291,43 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 			     else
 			     collect (list name nil code)))
 	 (cl-macrolet ((recurse
-			(args3)
-			`(list
-			  ,@(cl-loop for spec in args3
-				     collect
-				     (if (not (and (listp spec) (listp (car spec)))) spec
-				       ;; get args for specifying buffer restriction (if any)
-				       `(let ,(extract-keyword-bindings
-					       'spec t :REPS :NOERROR :TL :BR :INCTL :INCBR :ROWS :COLS :FLATTEN)
-					  ;; set defaults and get buffer containing text
-					  (let* ((REPS (or REPS 1))
-						 (FLATTEN (cond ((numberp FLATTEN) FLATTEN) (FLATTEN 1)))
-						 (buf2 (if (not (or TL BR)) (current-buffer)
-							 ;; execute the restriction (if any) specified by the TL, BR, etc. 
-							 (goto-char (point-min))
-							 (copy-rectangle-to-buffer
-							  TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS)))
-						 results)
-					    ;; check for errors, and ignore them if NOERROR is non-nil
-					    (condition-case err
-						(setq results
-						      (with-current-buffer buf2
-							;; repeat the extraction for REPS repeats
-							(if (equal REPS 1) (testmacro ,spec)
-							  (cl-loop for i from 1 to REPS
-								   ;; extract the text into results
-								   collect (testmacro ,spec)))))
-					      (error (unless NOERROR
-						       (if (or TL BR) (kill-buffer buf2))
-						       (signal (car err) (cdr err)))))
-					    (if (or TL BR) (kill-buffer buf2))
-					    (if FLATTEN (-flatten-n FLATTEN results) results))))))))
-	   (with-current-buffer buf (goto-char (point-min)) (recurse ,args2)))))))
+			(args3)		;do not be tempted to use &rest here, you'll get infinite recursion!
+			(if (or (not (listp args3)) (symbolp (car args3))) args3
+			  (let ((args4 args3))
+			    `(let ,(extract-keyword-bindings
+				    'args4 t :REPS :NOERROR :TL :BR :INCTL :INCBR :ROWS :COLS :FLATTEN)
+			       ;; set defaults and get buffer containing text
+			       (let* ((REPS (or REPS 1))
+				      (FLATTEN (or FLATTEN 0))
+				      (buf2 (if (not (or TL BR)) (current-buffer)
+					      ;; execute the restriction (if any) specified by the TL, BR, etc. 
+					      (goto-char (point-min))
+					      (copy-rectangle-to-buffer
+					       TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS)))
+				      results allresults)
+				 ;; check for errors, and ignore them if NOERROR is non-nil
+				 (with-current-buffer buf2
+				   ;; repeat the extraction for REPS repeats
+				   (cl-loop for i from 1 to REPS
+					    do (let (results)
+						 ,@(cl-loop for spec in args4
+							    collect
+							    `(setq results
+								   (cons
+								    ;; get args for specifying buffer restriction (if any)
+								    (condition-case err
+									(recurse ,spec)
+								      (error (unless NOERROR
+									       (if (or TL BR)
+										   (kill-buffer buf2))
+									       (signal (car err) (cdr err)))))
+								    results)))
+						 (setq allresults
+						       (cons (-flatten-n 1 (reverse results)) allresults)))))
+				 (if (or TL BR) (kill-buffer buf2))
+				 (-flatten-n FLATTEN (reverse allresults))))))))
+	   (with-current-buffer buf
+	     (save-excursion (goto-char (point-min)) (recurse ,args2))))))))
 
 (provide 'extract-text)
 
