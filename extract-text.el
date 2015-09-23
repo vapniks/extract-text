@@ -228,6 +228,8 @@ PRED returns nil when supplied with the key value as argument."
   "Remove & return first key & following item from list referenced by LSTSYM.
 A key here means a symbol whose first character is :
 LSTSYM should be a symbol whose value is a list.
+If there are no keys in the list then return nil, otherwise return a cons cell
+whose car is the key and whose cdr is the corresponding value.
 If predicate function PRED is supplied then an error will be thrown if
 PRED returns nil when supplied with the key value as argument."
   (let ((lst (gensym)))
@@ -236,11 +238,12 @@ PRED returns nil when supplied with the key value as argument."
 				(and (symbolp x)
 				     (string-match "^:" (symbol-name x)))) ,lst)))
        (unless (not ind)
-	 (let ((val (nth (1+ ind) ,lst)))
+	 (let ((key (nth ind ,lst))
+	       (val (nth (1+ ind) ,lst)))
 	   (set ,lstsym (append (-take ind ,lst) (-drop (+ 2 ind) ,lst)))
 	   (if (and ,pred (not (funcall ,pred val)))
-	       (error "Invalid value for %S" (val (nth ind) ,lst))
-	     val))))))
+	       (error "Invalid value for %S" key)
+	     (cons key val)))))))
 
 (defmacro extract-keyword-bindings (args &optional check &rest keys)
   "Extract KEYS and corresponding values from ARGS, and return in let-style bindings list.
