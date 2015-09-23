@@ -273,7 +273,7 @@ For each iteration of the loop, `key' will be bound to the current keyword,
 `value' will be bound to the corresponding value, and `keyvaluepair' will
 be bound to a cons cell containing these elements (key & value)."
   `(let ((lstsym ,lst))
-     (cl-loop for keyvaluepair = (extract-first-keyword-arg 'lstsym ,pred)
+     (cl-loop for keyvaluepair = (extract-first-keyword-arg 'lstsym)
 	      for key = (car keyvaluepair)
 	      for value = (cdr keyvaluepair)
 	      while keyvaluepair do (eval '(progn ,@body)))))
@@ -320,22 +320,24 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 			(extract-matching-rectangle
 			 tl br :inctl inctl :incbr incbr :rows rows :cols cols :noerror noerror))
 		  (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline bwdline fwdword bwdword fwdmark bwdmark pos)
-			(if (> (length all) 2) (error "Too many arguments in call to back"))
-			(cond (fwdregex (if (listp fwdregex) (apply 're-search-forward bwdregex)
-					  (re-search-forward fwdregex)))
-			      (bwdregex (if (listp bwdregex) (apply 're-search-backward bwdregex)
-					  (re-search-backward bwdregex)))
-			      (fwdchar (forward-char fwdchar))
-			      (bwdchar (backward-char bwdchar))
-			      (fwdline (forward-line fwdline))
-			      (bwdline (forward-line (- bwdline)))
-			      (fwdword (right-word fwdword))
-			      (bwdword (left-word bwdword))
-			      (fwdmark (if (last positions fwdmark) ;assumes `positions' list is in scope
-					   (goto-char (car (last positions fwdmark)))))
-			      (bwdmark (if (nth bwdmark positions) ;assumes `positions' list is in scope
-					   (goto-char (nth bwdmark positions))))
-			      (pos (goto-char pos)))
+			;;(if (> (length all) 2) (error "Too many arguments in call to back"))
+			(loop-over-keyword-args
+			 all (case key
+			       (:fwdregex (if (listp value) (apply 're-search-forward value)
+					    (re-search-forward value)))
+			       (:bwdregex (if (listp value) (apply 're-search-backward value)
+					    (re-search-backward value)))
+			       (:fwdchar (forward-char value))
+			       (:bwdchar (backward-char value))
+			       (:fwdline (forward-line value))
+			       (:bwdline (forward-line (- value)))
+			       (:fwdword (right-word value))
+			       (:bwdword (left-word value))
+			       (:fwdmark (if (last positions value) ;assumes `positions' list is in scope
+					     (goto-char (car (last positions value)))))
+			       (:bwdmark (if (nth value positions) ;assumes `positions' list is in scope
+					     (goto-char (nth value positions))))
+			       (:pos (goto-char value))))
 			nil)
 		  ,@(cl-loop for (name . code) in extract-text-wrappers
 			     if (> (length code) 1)
