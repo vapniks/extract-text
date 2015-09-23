@@ -245,6 +245,17 @@ PRED returns nil when supplied with the key value as argument."
 	       (error "Invalid value for %S" key)
 	     (cons key val)))))))
 
+(defmacro loop-over-keyword-args (lst &rest body)
+  "Loop over the keyword args in list LST, evaluating BODY forms each time.
+For each iteration of the loop, `key' will be bound to the current keyword,
+`value' will be bound to the corresponding value, and `keyvaluepair' will
+be bound to a cons cell containing these elements (key & value)."
+  `(let ((lstsym ,lst))
+     (cl-loop for keyvaluepair = (extract-first-keyword-arg 'lstsym ,pred)
+	      for key = (car keyvaluepair)
+	      for value = (cdr keyvaluepair)
+	      while keyvaluepair do (eval '(progn ,@body)))))
+
 (defmacro extract-keyword-bindings (args &optional check &rest keys)
   "Extract KEYS and corresponding values from ARGS, and return in let-style bindings list.
 If ARGS is a symbol referring to a list, then KEYS and corresponding values will be removed from ARGS.
