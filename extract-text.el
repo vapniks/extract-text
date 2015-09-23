@@ -224,6 +224,28 @@ PRED returns nil when supplied with the key value as argument."
 	       (error "Invalid value for %S" ,key)
 	     val))))))
 
+(defmacro extract-keyword-bindings (args &optional check &rest keys)
+  "Extract KEYS and corresponding values from ARGS, and return in let-style bindings list.
+If ARGS is a symbol referring to a list, then KEYS and corresponding values will be removed from ARGS.
+If CHECK is non-nil then if there are any keys (beginning with :) in ARGS other than those in KEYS 
+an error will be thrown."
+  (let ((args2 (gensym))
+	(args3 (gensym)))
+    `(let ((,args2 ,args)
+	   (,args3 (if (symbolp ,args) ,args ',args2)))
+       (if ,check
+	   (let* ((allkeys (-filter (lambda (x) (and (symbolp x)
+						     (string-match "^:" (symbol-name x))))
+				    (eval ,args3)))
+		  (unusedkeys (-difference allkeys ',keys)))
+	     (if unusedkeys
+		 (error "Keyword argument %s not one of %s" (car unusedkeys) ',keys))))
+       (cl-loop for key in ',keys
+		collect (list (if (string-match "^:" (symbol-name key))
+				  (intern (substring (symbol-name key) 1))
+				key)
+			      (extract-keyword-arg key ,args3))))))
+
 (defmacro extract-first-keyword-arg (lstsym &optional pred)
   "Remove & return first key & following item from list referenced by LSTSYM.
 A key here means a symbol whose first character is :
@@ -255,28 +277,6 @@ be bound to a cons cell containing these elements (key & value)."
 	      for key = (car keyvaluepair)
 	      for value = (cdr keyvaluepair)
 	      while keyvaluepair do (eval '(progn ,@body)))))
-
-(defmacro extract-keyword-bindings (args &optional check &rest keys)
-  "Extract KEYS and corresponding values from ARGS, and return in let-style bindings list.
-If ARGS is a symbol referring to a list, then KEYS and corresponding values will be removed from ARGS.
-If CHECK is non-nil then if there are any keys (beginning with :) in ARGS other than those in KEYS 
-an error will be thrown."
-  (let ((args2 (gensym))
-	(args3 (gensym)))
-    `(let ((,args2 ,args)
-	   (,args3 (if (symbolp ,args) ,args ',args2)))
-       (if ,check
-	   (let* ((allkeys (-filter (lambda (x) (and (symbolp x)
-						     (string-match "^:" (symbol-name x))))
-				    (eval ,args3)))
-		  (unusedkeys (-difference allkeys ',keys)))
-	     (if unusedkeys
-		 (error "Keyword argument %s not one of %s" (car unusedkeys) ',keys))))
-       (cl-loop for key in ',keys
-		collect (list (if (string-match "^:" (symbol-name key))
-				  (intern (substring (symbol-name key) 1))
-				key)
-			      (extract-keyword-arg key ,args3))))))
 
 (defcustom extract-text-wrappers nil
   "A list of wrapper functions that can be used with `extract-text'.
