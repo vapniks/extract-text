@@ -209,6 +209,7 @@ found an error will be thrown."
 
 (defmacro extract-keyword-arg (key lstsym &optional pred)
   "Remove KEY & following item from list referenced by LSTSYM, and return item.
+A key here means a symbol whose first character is :
 LSTSYM should be a symbol whose value is a list.
 If KEY is not in the list then return nil.
 If predicate function PRED is supplied then an error will be thrown if
@@ -222,7 +223,25 @@ PRED returns nil when supplied with the key value as argument."
 	   (if (and ,pred (not (funcall ,pred val)))
 	       (error "Invalid value for %S" ,key)
 	     val))))))
- 
+
+(defmacro extract-first-keyword-arg (lstsym &optional pred)
+  "Remove & return first key & following item from list referenced by LSTSYM.
+A key here means a symbol whose first character is :
+LSTSYM should be a symbol whose value is a list.
+If predicate function PRED is supplied then an error will be thrown if
+PRED returns nil when supplied with the key value as argument."
+  (let ((lst (gensym)))
+    `(let* ((,lst (eval ,lstsym))
+	    (ind (-find-index (lambda (x)
+				(and (symbolp x)
+				     (string-match "^:" (symbol-name x)))) ,lst)))
+       (unless (not ind)
+	 (let ((val (nth (1+ ind) ,lst)))
+	   (set ,lstsym (append (-take ind ,lst) (-drop (+ 2 ind) ,lst)))
+	   (if (and ,pred (not (funcall ,pred val)))
+	       (error "Invalid value for %S" (val (nth ind) ,lst))
+	     val))))))
+
 (defmacro extract-keyword-bindings (args &optional check &rest keys)
   "Extract KEYS and corresponding values from ARGS, and return in let-style bindings list.
 If ARGS is a symbol referring to a list, then KEYS and corresponding values will be removed from ARGS.
@@ -291,7 +310,7 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 			(cond (fwdregex (if (listp fwdregex) (apply 're-search-forward bwdregex)
 					  (re-search-forward fwdregex)))
 			      (bwdregex (if (listp bwdregex) (apply 're-search-backward bwdregex)
-					    (re-search-backward bwdregex)))
+					  (re-search-backward bwdregex)))
 			      (fwdchar (forward-char fwdchar))
 			      (bwdchar (backward-char bwdchar))
 			      (fwdline (forward-line fwdline))
@@ -310,7 +329,7 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 			     else
 			     collect (list name nil code)))
 	 (cl-macrolet ((recurse
-			(args3)		;do not be tempted to use &rest here, you'll get infinite recursion!
+			(args3)	;do not be tempted to use &rest here, you'll get infinite recursion!
 			(if (or (not (listp args3)) (symbolp (car args3))) args3
 			  (let ((args4 args3)) ;need this let form so we can use a symbol 'args4 to access the input
 			    `(let ,(extract-keyword-bindings
