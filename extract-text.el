@@ -317,10 +317,11 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 			       (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
 			   (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)))
 		  (rect (tl br &key (inctl t) (incbr t) rows cols noerror)
+			(if (not (or tl (and rows cols))) (setq tl (point)))
 			(extract-matching-rectangle
 			 tl br :inctl inctl :incbr incbr :rows rows :cols cols :noerror noerror))
-		  (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline bwdline fwdword bwdword fwdmark bwdmark pos)
-			;;(if (> (length all) 2) (error "Too many arguments in call to back"))
+		  (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline
+			       bwdline fwdword bwdword fwdmark bwdmark pos)
 			(loop-over-keyword-args
 			 all (case key
 			       (:fwdregex (if (listp value) (apply 're-search-forward value)
