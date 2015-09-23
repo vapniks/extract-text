@@ -278,13 +278,31 @@ ARGS should be a list of wrapper functions for extracting bits of text."
     `(let* (,@(extract-keyword-bindings 'args2 nil :buffer)
 	    (buf (or buffer (current-buffer))))
        ;; scope in some wrapper functions
-       (cl-flet* ((regex (regexp &key count noerror)
-			 (let ((txt (extract-matching-strings regexp :count count :noerror noerror))
+       (cl-flet* ((regex (regexp &optional bound noerror count)
+			 (let ((txt (extract-matching-strings
+				     regexp :count count :noerror noerror :endpos bound))
 			       (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
 			   (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)))
 		  (rect (tl br &key (inctl t) (incbr t) rows cols noerror)
 			(extract-matching-rectangle
 			 tl br :inctl inctl :incbr incbr :rows rows :cols cols :noerror noerror))
+		  (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline bwdline fwdword bwdword fwdmark bwdmark pos)
+			(if (> (length all) 2) (error "Too many arguments in call to back"))
+			(cond (fwdregex (re-search-forward fwdregex))
+			      (bwdregex (if (listp bwdregex) (apply 're-search-backward bwdregex)
+					    (re-search-backward bwdregex)))
+			      (fwdchar (forward-char fwdchar))
+			      (bwdchar (backward-char bwdchar))
+			      (fwdline (forward-line fwdline))
+			      (bwdline (forward-line (- bwdline)))
+			      (fwdword (right-word fwdword))
+			      (bwdword (left-word bwdword))
+			      (fwdmark (if (last positions fwdmark) ;assumes `positions' list is in scope
+					   (goto-char (car (last positions fwdmark)))))
+			      (bwdmark (if (nth bwdmark positions) ;assumes `positions' list is in scope
+					   (goto-char (nth bwdmark positions))))
+			      (pos (goto-char pos)))
+			nil)
 		  ,@(cl-loop for (name . code) in extract-text-wrappers
 			     if (> (length code) 1)
 			     collect `(,name (,@(car code)) ,@(cdr code))
@@ -293,7 +311,7 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 	 (cl-macrolet ((recurse
 			(args3)		;do not be tempted to use &rest here, you'll get infinite recursion!
 			(if (or (not (listp args3)) (symbolp (car args3))) args3
-			  (let ((args4 args3))
+			  (let ((args4 args3)) ;need this let form so we can use a symbol 'args4 to access the input
 			    `(let ,(extract-keyword-bindings
 				    'args4 t :REPS :NOERROR :TL :BR :INCTL :INCBR :ROWS :COLS :FLATTEN)
 			       ;; set defaults and get buffer containing text
@@ -304,7 +322,7 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 					      (goto-char (point-min))
 					      (copy-rectangle-to-buffer
 					       TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS)))
-				      results allresults)
+				      allresults positions)
 				 ;; check for errors, and ignore them if NOERROR is non-nil
 				 (with-current-buffer buf2
 				   ;; repeat the extraction for REPS repeats
@@ -312,7 +330,8 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 					    do (let (results)
 						 ,@(cl-loop for spec in args4
 							    collect
-							    `(setq results
+							    `(setq positions (cons (point) positions)
+								   results
 								   (cons
 								    ;; get args for specifying buffer restriction (if any)
 								    (condition-case err
