@@ -385,6 +385,20 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 	   (with-current-buffer buf
 	     (save-excursion (goto-char (point-min)) (recurse ,args2))))))))
 
+(defun extract-text-from-buffers (bufs &rest spec)
+  "Extract text from buffers listed in BUFS or matching regexp BUFS.
+SPEC is the extraction specification to pass to the `extract-text' function."
+  (if (stringp bufs)
+      (setq bufs (cl-loop for buf in (buffer-list)
+			  when (string-match bufs (buffer-name buf))
+			  collect buf)))
+  (cl-loop for buf in bufs
+	   collect (extract-text :buffer buf spec)))
+
+;; (defun extract-text-from-files (files &rest spec)
+;;   "Extract text from list of FILES.
+;; SPEC is the extraction specification to pass to the `extract-text' function.")
+
 (provide 'extract-text)
 
 ;; (magit-push)
