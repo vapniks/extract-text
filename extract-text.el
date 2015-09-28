@@ -406,9 +406,20 @@ SPEC is the extraction specification to pass to the `extract-text' function."
      ,@(cl-loop for buf in bufs
 		collect `(extract-text :buffer ,buf ,@spec))))
 
-;; (defun extract-text-from-files (files &rest spec)
-;;   "Extract text from list of FILES.
-;; SPEC is the extraction specification to pass to the `extract-text' function.")
+(defmacro extract-text-from-files (files flatten &rest spec)
+  "Extract text from list of FILES.
+SPEC is the extraction specification to pass to the `extract-text' function."
+  (setq files (cond ((stringp files) (file-expand-wildcards files))
+		    ((listp files) files)
+		    (t (error "Invalid argument for files")))
+	flatten (or flatten 0))
+  `(-flatten-n ,flatten
+	       (list
+		,@(cl-loop for file in files
+			   for bufexists = (find-buffer-visiting file)
+			   for buf = (if (file-readable-p file) (find-file-noselect file))
+			   if buf collect `(prog1 (extract-text :buffer ,buf ,@spec)
+					     (unless ,bufexists (kill-buffer ,buf)))))))
 
 (provide 'extract-text)
 
