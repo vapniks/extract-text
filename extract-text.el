@@ -291,8 +291,8 @@ These variables are available when evaluating the expressions.
 
 EXPRESSION are elisp forms. They are wrapped in a `progn' and
 compose the body of the wrapper function. This body is executed
-when the function is called by name --e.g. (wrapper)-- as part of
-`extract-text' (which see).
+when the function is called by name --e.g. (wrapper arg1 arg2)-- 
+as part of `extract-text' (which see).
 
 Each wrapper function should return a string or list of strings."
   :group 'extract-text
@@ -391,24 +391,34 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 	   (with-current-buffer buf
 	     (save-excursion (goto-char (point-min)) (recurse ,args2))))))))
 
-(defmacro extract-text-from-buffers (bufs &rest spec)
-  "Extract text from buffers listed in BUFS or matching regexp BUFS.
-SPEC is the extraction specification to pass to the `extract-text' function."
-  (setq bufs (if (stringp bufs)
-		 (cl-loop for buf in (buffer-list)
-			  for name = (buffer-name buf)
-			  when (string-match bufs name)
-			  collect name)
-	       (cl-loop for buf in bufs
-			if (stringp buf) collect buf
-			else collect (buffer-name buf))))
+(defmacro extract-text-from-buffers (buffers &rest spec)
+  "Extract text from buffers listed in BUFFERS or matching regexp BUFFERS.
+SPEC is the extraction specification to pass to the `extract-text' function.
+BUFFERS can be either a list of buffers, a list of buffer names, or a regexp
+matching names of buffers to use.
+The return value will be a list of lists. Each sublist will be the list returned
+by `extract-text' applied to the corresponding buffer.
+You can flatten this list using the `-flatten-n' function (which see)."
+  (setq buffers (if (stringp buffers)
+		    (cl-loop for buf in (buffer-list)
+			     for name = (buffer-name buf)
+			     when (string-match buffers name)
+			     collect name)
+		  (cl-loop for buf in buffers
+			   if (stringp buf) collect buf
+			   else collect (buffer-name buf))))
   `(list
-    ,@(cl-loop for buf in bufs
+    ,@(cl-loop for buf in buffers
 	       collect `(extract-text :buffer ,buf ,@spec))))
 
 (defmacro extract-text-from-files (files &rest spec)
-  "Extract text from list of FILES.
-SPEC is the extraction specification to pass to the `extract-text' function."
+  "Extract text from FILES.
+SPEC is the extraction specification to pass to the `extract-text' function.
+FILES can be either a list of filepaths or a wildcard pattern matching several
+filepaths (see `file-expand-wildcards').
+The return value will be a list of lists. Each sublist will be the list returned
+by `extract-text' applied to the corresponding file.
+You can flatten this list using the `-flatten-n' function (which see)."
   (setq files (cond ((stringp files) (file-expand-wildcards files))
 		    ((listp files) files)
 		    (t (error "Invalid argument for files"))))
