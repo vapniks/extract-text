@@ -347,7 +347,13 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 			     collect (list name nil code)))
 	 (cl-macrolet ((recurse
 			(args3)	;do not be tempted to use &rest here, you'll get infinite recursion!
-			(if (or (not (listp args3)) (symbolp (car args3))) args3
+			(if (or (not (listp args3))
+				(functionp (car args3))
+				(macrop (car args3))
+				(memq (car args3)
+				      (remove 'nil
+					      (list 'regex 'rect 'move (mapcar 'car extract-text-wrappers)))))
+			    args3
 			  (let ((args4 args3)) ;need this let form so we can use a symbol 'args4 to access the input
 			    `(let ,(extract-keyword-bindings
 				    'args4 t :REPS :NOERROR :TL :BR :INCTL :INCBR :ROWS :COLS :FLATTEN)
@@ -385,15 +391,20 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 	   (with-current-buffer buf
 	     (save-excursion (goto-char (point-min)) (recurse ,args2))))))))
 
-(defun extract-text-from-buffers (bufs &rest spec)
+(defmacro extract-text-from-buffers (bufs &rest spec)
   "Extract text from buffers listed in BUFS or matching regexp BUFS.
 SPEC is the extraction specification to pass to the `extract-text' function."
-  (if (stringp bufs)
-      (setq bufs (cl-loop for buf in (buffer-list)
-			  when (string-match bufs (buffer-name buf))
-			  collect buf)))
-  (cl-loop for buf in bufs
-	   collect (extract-text :buffer buf spec)))
+  (setq bufs (if (stringp bufs)
+		 (cl-loop for buf in (buffer-list)
+			  for name = (buffer-name buf)
+			  when (string-match bufs name)
+			  collect name)
+	       (cl-loop for buf in bufs
+			if (stringp buf) collect buf
+			else collect (buffer-name buf))))
+  `(list
+     ,@(cl-loop for buf in bufs
+		collect `(extract-text :buffer ,buf ,@spec))))
 
 ;; (defun extract-text-from-files (files &rest spec)
 ;;   "Extract text from list of FILES.
