@@ -391,7 +391,7 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 	   (with-current-buffer buf
 	     (save-excursion (goto-char (point-min)) (recurse ,args2))))))))
 
-(defmacro extract-text-from-buffers (bufs flatten &rest spec)
+(defmacro extract-text-from-buffers (bufs &rest spec)
   "Extract text from buffers listed in BUFS or matching regexp BUFS.
 SPEC is the extraction specification to pass to the `extract-text' function."
   (setq bufs (if (stringp bufs)
@@ -401,26 +401,23 @@ SPEC is the extraction specification to pass to the `extract-text' function."
 			  collect name)
 	       (cl-loop for buf in bufs
 			if (stringp buf) collect buf
-			else collect (buffer-name buf)))
-	flatten (or flatten 0))
-  `(-flatten-n ,flatten (list
-			 ,@(cl-loop for buf in bufs
-				    collect `(extract-text :buffer ,buf ,@spec)))))
+			else collect (buffer-name buf))))
+  `(list
+    ,@(cl-loop for buf in bufs
+	       collect `(extract-text :buffer ,buf ,@spec))))
 
-(defmacro extract-text-from-files (files flatten &rest spec)
+(defmacro extract-text-from-files (files &rest spec)
   "Extract text from list of FILES.
 SPEC is the extraction specification to pass to the `extract-text' function."
   (setq files (cond ((stringp files) (file-expand-wildcards files))
 		    ((listp files) files)
-		    (t (error "Invalid argument for files")))
-	flatten (or flatten 0))
-  `(-flatten-n ,flatten
-	       (list
-		,@(cl-loop for file in files
-			   for bufexists = (find-buffer-visiting file)
-			   for buf = (if (file-readable-p file) (find-file-noselect file))
-			   if buf collect `(prog1 (extract-text :buffer ,buf ,@spec)
-					     (unless ,bufexists (kill-buffer ,buf)))))))
+		    (t (error "Invalid argument for files"))))
+  `(list
+    ,@(cl-loop for file in files
+	       for bufexists = (find-buffer-visiting file)
+	       for buf = (if (file-readable-p file) (find-file-noselect file))
+	       if buf collect `(prog1 (extract-text :buffer ,buf ,@spec)
+				 (unless ,bufexists (kill-buffer ,buf))))))
 
 (provide 'extract-text)
 
