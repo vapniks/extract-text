@@ -391,7 +391,7 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 	   (with-current-buffer buf
 	     (save-excursion (goto-char (point-min)) (recurse ,args2))))))))
 
-(defmacro extract-text-from-buffers (bufs &rest spec)
+(defmacro extract-text-from-buffers (bufs flatten &rest spec)
   "Extract text from buffers listed in BUFS or matching regexp BUFS.
 SPEC is the extraction specification to pass to the `extract-text' function."
   (setq bufs (if (stringp bufs)
@@ -401,10 +401,11 @@ SPEC is the extraction specification to pass to the `extract-text' function."
 			  collect name)
 	       (cl-loop for buf in bufs
 			if (stringp buf) collect buf
-			else collect (buffer-name buf))))
-  `(list
-     ,@(cl-loop for buf in bufs
-		collect `(extract-text :buffer ,buf ,@spec))))
+			else collect (buffer-name buf)))
+	flatten (or flatten 0))
+  `(-flatten-n ,flatten (list
+			 ,@(cl-loop for buf in bufs
+				    collect `(extract-text :buffer ,buf ,@spec)))))
 
 (defmacro extract-text-from-files (files flatten &rest spec)
   "Extract text from list of FILES.
