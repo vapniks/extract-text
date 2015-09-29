@@ -240,17 +240,20 @@ an error will be thrown."
     `(let ((,args2 ,args)
 	   (,args3 (if (symbolp ,args) ,args ',args2)))
        (if ,check
-	   (let* ((allkeys (-filter (lambda (x) (and (symbolp x)
+	   (let* ((argskeys (-filter (lambda (x) (and (symbolp x)
 						     (string-match "^:" (symbol-name x))))
 				    (eval ,args3)))
-		  (unusedkeys (-difference allkeys ',keys)))
+		  (requiredkeys (mapcar (lambda (x) (if (consp x) (car x) x)) ',keys))
+		  (unusedkeys (-difference argskeys requiredkeys)))
 	     (if unusedkeys
 		 (error "Keyword argument %s not one of %s" (car unusedkeys) ',keys))))
-       (cl-loop for key in ',keys
+       (cl-loop for pair in ',keys
+		for key = (if (consp pair) (car pair) pair)
+		for val = (if (consp pair) (cadr pair))
 		collect (list (if (string-match "^:" (symbol-name key))
 				  (intern (substring (symbol-name key) 1))
 				key)
-			      (extract-keyword-arg key ,args3))))))
+			      (or (extract-keyword-arg key ,args3) val))))))
 
 (defmacro extract-first-keyword-arg (lstsym &optional pred)
   "Remove & return first key & following item from list referenced by LSTSYM.
