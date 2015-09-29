@@ -238,23 +238,25 @@ If CHECK is non-nil then if there are any keys (beginning with :) in ARGS other 
 an error will be thrown."
   (let ((args2 (gensym))
 	(args3 (gensym)))
-    `(let ((,args2 ,args)
+    `(let ((,args2 (if (symbolp ,args) (eval ,args) ,args))
 	   (,args3 (if (symbolp ,args) ,args ',args2)))
        (if ,check
 	   (let* ((argskeys (-filter (lambda (x) (and (symbolp x)
-						     (string-match "^:" (symbol-name x))))
-				    (eval ,args3)))
+						      (string-match "^:" (symbol-name x))))
+				     ,args2))
 		  (requiredkeys (mapcar (lambda (x) (if (consp x) (car x) x)) ',keys))
 		  (unusedkeys (-difference argskeys requiredkeys)))
 	     (if unusedkeys
 		 (error "Keyword argument %s not one of %s" (car unusedkeys) ',keys))))
        (cl-loop for pair in ',keys
 		for key = (if (consp pair) (car pair) pair)
-		for val = (if (consp pair) (cadr pair))
+		for defval = (if (consp pair) (cadr pair))
 		collect (list (if (string-match "^:" (symbol-name key))
 				  (intern (substring (symbol-name key) 1))
 				key)
-			      (or (extract-keyword-arg key ,args3) val))))))
+			      (if (memq key ,args2)
+				  (extract-keyword-arg key ,args3)
+				defval))))))
 
 (defmacro extract-first-keyword-arg (lstsym &optional pred)
   "Remove & return first key & following item from list referenced by LSTSYM.
@@ -468,7 +470,7 @@ EXAMPLES:
 			    args3
 			  (let ((args4 args3)) ;need this let form so we can use a symbol 'args4 to access the input
 			    `(let ,(extract-keyword-bindings
-				    'args4 t :REPS :NOERROR :TL :BR :INCTL :INCBR :ROWS :COLS :FLATTEN)
+				    'args4 t :REPS :NOERROR :TL :BR (:INCTL t) (:INCBR t) :ROWS :COLS :FLATTEN)
 			       ;; set defaults and get buffer containing text
 			       (let* ((REPS (or REPS 1))
 				      (FLATTEN (or FLATTEN 0))
