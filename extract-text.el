@@ -303,17 +303,115 @@ Each wrapper function should return a string or list of strings."
                                        (sexp :tag "Default value")))
                          (repeat (sexp :tag "Expression"))))))
 
+;; TODO: return 'skip from `move' function, and remove all 'skip symbols from
+;; returned list.
 (cl-defmacro extract-text (&rest args)
-  "Extract text from current-buffer or BUFFER according to specifications in ARGS.
-ARGS should be a list of wrapper functions for extracting bits of text."
+  "Extract text from buffer according to specifications in ARGS.
+ARGS should be a list/tree of wrapper functions for extracting bits of text (see below).
+By default the current buffer is used, but you can specify a different buffer by 
+including a :buffer keyword arg in ARGS (as either a buffer or buffer name).
+
+The text extraction is carried out in a sequential and recursive manner according 
+to the elements of ARGS. Each element may be either a function for performing a 
+specific extraction or cursor reposition (see below), a keyword arg & corresponding 
+value (see below), or a list which is then traversed recursively.
+This allows for a great amount of flexibility in the extraction specification.
+
+AVAILABLE FUNCTIONS:
+
+The following functions can be used to extract text or move the cursor:
+
+ (regex regexp &key count startpos endpos noerror)
+This is a wrapper around `extract-matching-strings' (which see).
+Unlike `extract-matching-strings', if regexp contains subexpressions then only matches 
+to those subexpressions will be returned, otherwise the whole match is returned.
+
+ (rect tl br &key (inctl t) (incbr t) rows cols noerror)
+This is a wrapper around `extract-matching-rectangle' (which see). It takes exactly the
+same arguments, but also allows the tl argument to be omitted even when the rows & cols
+arguments are omitted, in which case tl is set to the current cursor position.
+
+ (move &rest all &key fwdregex bwdregex fwdchar bwdchar 
+      fwdline bwdline fwdword bwdword fwdmark bwdmark pos)
+This function is used for repositioning the cursor in between calls to extraction functions.
+The keyword args are processed sequentially, each one specifying a cursor movement, and may
+contain repeats. The keyword args specify the following movements:
+
+   fwdregex/bwdregex - call `re-search-forward'/`re-search-backward' with fwdregex/bwdregex as 
+   argument. If the arg is a list then call the appropriate function with all arguments in the 
+   list (in order).
+   
+   pos             - call `goto-char' with pos as argument
+   
+   fwdchar/bwdchar - call `forward-char'/`backward-char' with fwdchar/bwdchar as argument.
+   
+   fwdline/bwdline - call `forward-line'/`backward-line' with fwdline/bwdline as argument.
+   
+   fwdword/bwdword - call `right-word'/`left-word' with fwdword/bwdword as argument.
+   
+   fwdline/bwdline - call `forward-line' with fwdline/(- bwdline) as argument.
+   
+   fwdmark/bwdmark - before each extraction/movement function is called, the current cursor
+                     position is added to the end of a list. The fwdmark/bwdmark args tell the
+                     move function to move forward from the start or backward from the end of 
+                     that list. E.g. \":bwdmark 2\" will move the cursor to the position before
+                     the 2nd last function call.
+
+ For example (move :bwdmark 3 :fwdregex \"foo\" :fwdword 2) will first move the cursor to the position
+ it was in just before the 3rd previous function call, then move to the next occurrence of \"foo\",
+ and then move forward 2 words.
+
+You may also call any of the user functions defined in `extract-text-wrappers'.
+
+KEYWORD ARGS:
+
+The following keyword args may be used to specify how to deal with the extractions in the current
+list. 
+
+:REPS    - number of times to repeat the current list of extractions (default 1)
+:NOERROR - if set to 'skip then extractions that throw errors will be ignored, if set to any other 
+           non-nil symbol then that symbol will be returned in place of any extractions that throw
+           errors
+:FLATTEN - specify that returned list should be flattened to this depth with `-flatten-n' function 
+
+The following keyword args are passed to `extract-matching-rectangle' (which see) to restrict the
+text to a rectangle in the current buffer before performing extractions: 
+  :TL, :BR, :INCTL, :INCBR, :ROWS, :COLS
+This allows you to narrow down the search space for the extraction functions.
+
+EXAMPLES:
+
+ (extract-text (regex \"[0-9]+\\.[0-9]+\") :REPS 5 :NOERROR 'NA)
+ 
+ explanation: extract the first 5 numbers from the current buffer. 
+              If there are fewer than 5 numbers, pad with 'NA.
+
+ (extract-text (regex \"[0-9]+\\.[0-9]+\") :REPS 5 :NOERROR 'NA :buffer \"foobar\")
+
+ explanation: as above but extract from the buffer named \"foobar\".
+
+ A more complex example:
+
+ (extract-text (rect \"Address:\" nil :inctl nil :rows 4 :cols 25)
+               (move :bwdmark 1)
+               ((regex \"Amount: *\\([0-9]+\\.[0-9]+\\)\") :REPS 3 :TL \"Address:\" :BR \"Total:\" :INCBR nil :COLS t)
+               (regex \"Total: *\\([0-9]+\\.[0-9]+\\)\")
+               :REPS 1000 :NOERROR 'skip)
+
+ explanation: repeat the following extraction; extract an address in a rectangle of 4 rows and 25 columns, 
+                                               move back to a position before the address
+                                               extract three \"Amount\" numbers between \"Address\" and \"Total\"
+                                               extract a \"Total\" number.
+              repeat as many times possible upto 1000 times."
   (let ((args2 args))
     ;; First set the buffer
     `(let* (,@(extract-keyword-bindings 'args2 nil :buffer)
 	    (buf (or buffer (current-buffer))))
        ;; scope in some wrapper functions
-       (cl-flet* ((regex (regexp &optional bound noerror count)
+       (cl-flet* ((regex (regexp &key count startpos endpos noerror)
 			 (let ((txt (extract-matching-strings
-				     regexp :count count :noerror noerror :endpos bound))
+				     regexp :count count :startpos startpos
+				     :endpos endpos :noerror noerror))
 			       (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
 			   (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)))
 		  (rect (tl br &key (inctl t) (incbr t) rows cols noerror)
@@ -339,7 +437,7 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 			       (:bwdmark (if (nth value positions) ;assumes `positions' list is in scope
 					     (goto-char (nth value positions))))
 			       (:pos (goto-char value))))
-			nil)
+			'skip)
 		  ,@(cl-loop for (name . code) in extract-text-wrappers
 			     if (> (length code) 1)
 			     collect `(,name (,@(car code)) ,@(cdr code))
@@ -349,6 +447,7 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 			(args3)	;do not be tempted to use &rest here, you'll get infinite recursion!
 			(if (or (not (listp args3))
 				(functionp (car args3))
+				(eq (car args3) 'quote)
 				(macrop (car args3))
 				(memq (car args3)
 				      (remove 'nil
@@ -375,17 +474,19 @@ ARGS should be a list of wrapper functions for extracting bits of text."
 							    collect
 							    `(setq positions (cons (point) positions)
 								   results
-								   (cons
-								    ;; get args for specifying buffer restriction (if any)
-								    (condition-case err
-									(recurse ,spec)
-								      (error (unless NOERROR
-									       (if (or TL BR)
-										   (kill-buffer buf2))
-									       (signal (car err) (cdr err)))))
-								    results)))
-						 (setq allresults
-						       (cons (-flatten-n 1 (reverse results)) allresults)))))
+								   (remove
+								    'skip
+								    (cons
+								     ;; get args for specifying buffer restriction (if any)
+								     (condition-case err
+									 (recurse ,spec)
+								       (error (if NOERROR NOERROR
+										(if (or TL BR) (kill-buffer buf2))
+										(signal (car err) (cdr err)))))
+								     results))))
+						 (unless (null results)
+						   (setq allresults
+							 (cons (-flatten-n 1 (reverse results)) allresults))))))
 				 (if (or TL BR) (kill-buffer buf2))
 				 (-flatten-n FLATTEN (reverse allresults))))))))
 	   (with-current-buffer buf
