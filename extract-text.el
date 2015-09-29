@@ -106,7 +106,7 @@ non-nil in which case nil will be returned."
       (match-strings-no-properties regexp)))
 
 ;;;###autoload
-(cl-defun extract-matching-rectangle (tl br &key (inctl t) (incbr t) rows cols noerror)
+(cl-defun extract-matching-rectangle (tl br &key (inctl t) (incbr t) rows cols noerror idxs)
   "Extract a rectangle of text (list of strings) from the current buffer.
 The rectangle can be specified in several different ways:
 
@@ -141,7 +141,10 @@ The rectangle can be specified in several different ways:
     direction to normal, i.e. backwards from TL position or forwards from BR 
     position. This allows you to specify the rectangle from any corner position.
 
-If no matching rectangle is found then an error is thrown unless :NOERROR is non-nil."
+If no matching rectangle is found then an error is thrown unless :NOERROR is non-nil.
+To return a subset of the rows of the extracted rectangle set the :IDXS argument to
+a list of indices of rows to return (0 indicates 1st row), or just a single number
+to return a single row."
   ;; check we have the required arguments
   (if (not (and (or tl br)
 		(or (and tl br)
@@ -180,18 +183,21 @@ If no matching rectangle is found then an error is thrown unless :NOERROR is non
 			  (goto-char (if type (point-min) (point-max)))
 			  (move-to-column col t)
 			  (point)))))
-    (let ((tl2 (getpos tl (if inctl 'match-beginning 'match-end)))
-	  (br2 (getpos br (if incbr 'match-end 'match-beginning))))
-      (unless (memq 'nomatch (list tl2 br2))
-	(cond
-	 ((and tl2 br2 (eq cols t))
-	  (split-string (buffer-substring-no-properties tl2 br2) "\n"))
-	 ((and tl2 br2 (eq rows t))
-	  (extract-rectangle (adjust2 tl2 t) (adjust2 br2 nil)))
-	 ((and tl2 br2) (extract-rectangle tl2 br2))
-	 ((and (or tl2 br2) rows cols)
-	  (extract-rectangle (or tl2 (adjust1 br2 t rows cols))
-			     (or br2 (adjust1 tl2 nil rows cols)))))))))
+    (let* ((tl2 (getpos tl (if inctl 'match-beginning 'match-end)))
+	   (br2 (getpos br (if incbr 'match-end 'match-beginning)))
+	   (strs (unless (memq 'nomatch (list tl2 br2))
+		   (cond
+		    ((and tl2 br2 (eq cols t))
+		     (split-string (buffer-substring-no-properties tl2 br2) "\n"))
+		    ((and tl2 br2 (eq rows t))
+		     (extract-rectangle (adjust2 tl2 t) (adjust2 br2 nil)))
+		    ((and tl2 br2) (extract-rectangle tl2 br2))
+		    ((and (or tl2 br2) rows cols)
+		     (extract-rectangle (or tl2 (adjust1 br2 t rows cols))
+					(or br2 (adjust1 tl2 nil rows cols))))))))
+      (cond ((numberp idxs) (-select-by-indices (list idxs) strs))
+	    ((and (not (null idxs)) (listp idxs)) (-select-by-indices idxs strs))
+	    (t strs)))))
 
 (cl-defun copy-rectangle-to-buffer (tl br &key (inctl t) (incbr t) rows cols)
   "Copy a rectangular region of the current buffer to a new buffer.
@@ -414,10 +420,10 @@ EXAMPLES:
 				     :endpos endpos :noerror noerror))
 			       (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
 			   (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)))
-		  (rect (tl br &key (inctl t) (incbr t) rows cols noerror)
+		  (rect (tl br &key (inctl t) (incbr t) rows cols noerror idxs)
 			(if (not (or tl (and rows cols))) (setq tl (point)))
 			(extract-matching-rectangle
-			 tl br :inctl inctl :incbr incbr :rows rows :cols cols :noerror noerror))
+			 tl br :inctl inctl :incbr incbr :rows rows :cols cols :noerror noerror :idxs idxs))
 		  (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline
 			       bwdline fwdword bwdword fwdmark bwdmark pos)
 			(loop-over-keyword-args
