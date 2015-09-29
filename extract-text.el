@@ -233,6 +233,7 @@ PRED returns nil when supplied with the key value as argument."
 (defmacro extract-keyword-bindings (args &optional check &rest keys)
   "Extract KEYS and corresponding values from ARGS, and return in let-style bindings list.
 If ARGS is a symbol referring to a list, then KEYS and corresponding values will be removed from ARGS.
+Keys can be given default values by using (:key value) instead of just :key
 If CHECK is non-nil then if there are any keys (beginning with :) in ARGS other than those in KEYS 
 an error will be thrown."
   (let ((args2 (gensym))
