@@ -318,14 +318,17 @@ By default the current buffer is used, but you can specify a different buffer by
 including a :buffer keyword arg in ARGS (as either a buffer or buffer name).
 
 The text extraction is carried out in a sequential and recursive manner according 
-to the elements of ARGS. Each element may be either a function for performing a 
-specific extraction or cursor reposition (see below), a keyword arg & corresponding 
-value (see below), or a list which is then traversed recursively.
-This allows for a great amount of flexibility in the extraction specification.
+to the elements of ARGS, and the returned results reflect the structure of ARGS. 
+Each element may be either an atom or function call to be evaluated (see available
+function below), a keyword arg & corresponding value (see below), or a list which 
+is then traversed and evaluated recursively.
+This allows for a great amount of flexibility in the extraction specification: by use
+of parentheses and the :FLATTEN arg you can return arbitrary tree structures.
 
 AVAILABLE FUNCTIONS:
 
-The following functions can be used to extract text or move the cursor:
+As well as the usual elisp functions, the following extra functions are defined within 
+the scope of the evaluation of ARGS, and can be used to extract text or move the cursor:
 
  (regex regexp &key count startpos endpos noerror)
 This is a wrapper around `extract-matching-strings' (which see).
