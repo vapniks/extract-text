@@ -115,31 +115,35 @@ The rectangle can be specified in several different ways:
  2) By passing numbers between 0 & 1 to TL and BR indicating corner positions as a 
     fraction of the buffer size, e.g. 0.5 represents the midpoint of the buffer
 
- 2) By passing regular expressions to TL and BR which match strings delimiting the
+ 3) By passing regular expressions to TL and BR which match strings delimiting the
     corner positions. If the regexp contains any non-shy subexpressions, the first one will 
     be used for determining the tl/br match.
     By default the matched strings will be included in the rectangle. To exclude the matched 
     tl/br text so the rectangle starts/ends after/before the matched text you must set 
     INCTL and/or INCBR to nil (they are t by default).
 
- 3) By passing cons cells in the form (regex . rep) to TL and BR. In this case the
+ 4) By passing cons cells in the form (regex . rep) to TL and BR. In this case the
     rep'th match to regex will be used for the start/end position.
 
- 4) By a mixture of the above methods.
+ 5) By a mixture of the above methods.
 
- 5) By specifying TL & BR using one of the above methods and setting COLS to t
-    in which case all columns of all lines between TL & BR will be included.
-    The return value will be all text between TL & BR split at newlines and
-    put into a list. Note: this is not necessarily a rectangle exactly.
-
- 6) By specifying TL & BR using one of the above methods and setting ROWS to t
-    in which case all rows of all columns between TL & BR will be included.
-
- 5) By specifying just one of TL or BR (as a position, regexp, or cons cell), 
+ 6) By specifying just one of TL or BR (as a position, regexp, or cons cell), 
     and also specifying the number of COLS and ROWS of the rectangle. 
     If COLS or ROWS is negative then the columns/rows are counted in the opposite 
     direction to normal, i.e. backwards from TL position or forwards from BR 
     position. This allows you to specify the rectangle from any corner position.
+
+ 7) By specifying TL & BR using one of the above methods and setting COLS to t
+    in which case all columns of all lines between TL & BR will be included.
+    If one of TL/BR is missing it will be inferred to be in the same column as the
+    other, but ROWS rows apart. The return value will be all text between TL & BR 
+    split at newlines and put into a list. Note: this is not necessarily a rectangle 
+    exactly.
+
+ 8) By specifying TL & BR using one of the above methods and setting ROWS to t
+    in which case all rows of all columns between TL & BR will be included.
+    If one of TL/BR is missing it will be inferred to be in the same row as the
+    other, but COLS cols apart.
 
 If no matching rectangle is found then an error is thrown unless :NOERROR is non-nil.
 To return a subset of the rows of the extracted rectangle set the :IDXS argument to
@@ -182,7 +186,15 @@ to return a single row."
 			(let ((col (current-column)))
 			  (goto-char (if type (point-min) (point-max)))
 			  (move-to-column col t)
-			  (point)))))
+			  (point))))
+	     (adjust3 (pos cols type)
+		      (save-excursion
+			(goto-char pos)
+			(move-to-column
+			 (if type
+			     (+ cols (current-column))
+			   (- (current-column) cols)) t)
+			(point))))
     (let* ((tl2 (getpos tl (if inctl 'match-beginning 'match-end)))
 	   (br2 (getpos br (if incbr 'match-end 'match-beginning)))
 	   (strs (unless (memq 'nomatch (list tl2 br2))
@@ -192,6 +204,16 @@ to return a single row."
 		    ((and tl2 br2 (eq rows t))
 		     (extract-rectangle (adjust2 tl2 t) (adjust2 br2 nil)))
 		    ((and tl2 br2) (extract-rectangle tl2 br2))
+		    ((and tl2 (numberp rows) (eq cols t))
+		     (split-string (buffer-substring-no-properties
+				    tl2 (adjust1 tl2 nil rows 1)) "\n"))
+		    ((and br2 (numberp rows) (eq cols t))
+		     (split-string (buffer-substring-no-properties
+				    (adjust1 br2 t rows 1) br2) "\n"))
+		    ((and tl2 (numberp cols) (eq rows t))
+		     (extract-rectangle (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil)))
+		    ((and br2 (numberp cols) (eq rows t))
+		     (extract-rectangle (adjust2 (adjust3 br2 cols nil) t) (adjust2 br2 nil)))
 		    ((and (or tl2 br2) rows cols)
 		     (extract-rectangle (or tl2 (adjust1 br2 t rows cols))
 					(or br2 (adjust1 tl2 nil rows cols))))))))
