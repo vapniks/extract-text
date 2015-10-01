@@ -337,8 +337,8 @@ Each wrapper function should return a string or list of strings."
                                        (sexp :tag "Default value")))
                          (repeat (sexp :tag "Expression"))))))
 
-;; TODO: return 'skip from `move' function, and remove all 'skip symbols from
-;; returned list.
+;; TODO: scope in a `replace-regexp-in-string' type function for transforming text
+;; (user should be able to choose which elements of list it applies to)
 (cl-defmacro extract-text (&rest args)
   "Extract text from buffer according to specifications in ARGS.
 ARGS should be a list/tree of wrapper functions for extracting bits of text (see below).
