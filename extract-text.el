@@ -221,6 +221,7 @@ to return a single row."
 	    ((and (not (null idxs)) (listp idxs)) (-select-by-indices idxs strs))
 	    (t strs)))))
 
+;;;###autoload
 (cl-defun copy-rectangle-to-buffer (tl br &key (inctl t) (incbr t) rows cols)
   "Copy a rectangular region of the current buffer to a new buffer.
 Return the new buffer.
@@ -235,6 +236,7 @@ found an error will be thrown."
       (goto-char (point-min)))
     buf))
 
+;;;###autoload
 (defmacro extract-keyword-arg (key lstsym &optional pred)
   "Remove KEY & following item from list referenced by LSTSYM, and return item.
 A key here means a symbol whose first character is :
@@ -252,6 +254,7 @@ PRED returns nil when supplied with the key value as argument."
 	       (error "Invalid value for %S" ,key)
 	     val))))))
 
+;;;###autoload
 (defmacro extract-keyword-bindings (args &optional check &rest keys)
   "Extract KEYS and corresponding values from ARGS, and return in let-style bindings list.
 If ARGS is a symbol referring to a list, then KEYS and corresponding values will be removed from ARGS.
@@ -280,6 +283,7 @@ an error will be thrown."
 				  (extract-keyword-arg key ,args3)
 				defval))))))
 
+;;;###autoload
 (defmacro extract-first-keyword-arg (lstsym &optional pred)
   "Remove & return first key & following item from list referenced by LSTSYM.
 A key here means a symbol whose first character is :
@@ -301,6 +305,7 @@ PRED returns nil when supplied with the key value as argument."
 	       (error "Invalid value for %S" key)
 	     (cons key val)))))))
 
+;;;###autoload
 (defmacro loop-over-keyword-args (lst &rest body)
   "Loop over the keyword args in list LST, evaluating BODY forms each time.
 For each iteration of the loop, `key' will be bound to the current keyword,
@@ -312,6 +317,7 @@ be bound to a cons cell containing these elements (key & value)."
 	      for value = (cdr keyvaluepair)
 	      while keyvaluepair do (eval '(progn ,@body)))))
 
+;;;###autoload
 (defcustom extract-text-wrappers nil
   "A list of wrapper functions that can be used with `extract-text'.
 Each element has the form (NAME ARGLIST EXPRESSION [EXPRESSION ...]),
@@ -339,6 +345,9 @@ Each wrapper function should return a string or list of strings."
 
 ;; TODO: scope in a `replace-regexp-in-string' type function for transforming text
 ;; (user should be able to choose which elements of list it applies to)
+;; TODO: better error handling, don't keep repeating after an error when :NOERROR is non-nil
+
+;;;###autoload
 (cl-defmacro extract-text (&rest args)
   "Extract text from buffer according to specifications in ARGS.
 ARGS should be a list/tree of wrapper functions for extracting bits of text (see below).
@@ -529,6 +538,7 @@ EXAMPLES:
 	   (with-current-buffer buf
 	     (save-excursion (goto-char (point-min)) (recurse ,args2))))))))
 
+;;;###autoload
 (defmacro extract-text-from-buffers (buffers &rest spec)
   "Extract text from buffers listed in BUFFERS or matching regexp BUFFERS.
 SPEC is the extraction specification to pass to the `extract-text' function.
@@ -549,6 +559,7 @@ You can flatten this list using the `-flatten-n' function (which see)."
     ,@(cl-loop for buf in buffers
 	       collect `(extract-text :buffer ,buf ,@spec))))
 
+;;;###autoload
 (defmacro extract-text-from-files (files &rest spec)
   "Extract text from FILES.
 SPEC is the extraction specification to pass to the `extract-text' function.
