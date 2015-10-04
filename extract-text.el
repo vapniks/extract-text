@@ -343,10 +343,7 @@ Each wrapper function should return a string or list of strings."
                                        (sexp :tag "Default value")))
                          (repeat (sexp :tag "Expression"))))))
 
-;; TODO: scope in a `replace-regexp-in-string' type function for transforming text
-;; (user should be able to choose which elements of list it applies to)
 ;; TODO: better error handling, don't keep repeating after an error when :NOERROR is non-nil
-
 ;;;###autoload
 (cl-defmacro extract-text (&rest args)
   "Extract text from buffer according to specifications in ARGS.
@@ -406,6 +403,22 @@ contain repeats. The keyword args specify the following movements:
  For example (move :bwdmark 3 :fwdregex \"foo\" :fwdword 2) will first move the cursor to the position
  it was in just before the 3rd previous function call, then move to the next occurrence of \"foo\",
  and then move forward 2 words.
+
+ (transform (regexp rep strs &key fixedcase literal subexp start idxs)
+This function is a wrapper around `replace-regexp-in-string' for transforming extracted strings.
+The STRS argument can be a call to an extraction function that returns a string or list of strings.
+The keyword argument IDXS can be a single index or a list of indexes indicating which elements of
+STRS should be transformed. The other arguments are the same as for `replace-regexp-in-string'.
+Examples: 
+   (transform \"this\" \"that\" (rect \"foo\" \"baa\") :idxs '(1 4))
+
+   explanation: replace \"this\" with \"that\" in the 2nd and 5th strings of the rectangle between \"foo\" and \"baa\"
+
+  (transform \"\\\\([0-9]+\\\\)/\\\\([0-9]+\\\\)/\\\\([0-9]+\\\\)\" \"[\\\\3-\\\\2-\\\\1]\"
+           (regex \"\\\\([0-9]+\\\\)/\\\\([0-9]+\\\\)/\\\\([0-9]+\\\\)\"))
+
+   explanation: extract a date in the form DD/MM/YYYY and convert to an org-timestamp
+                (you may want to add something like this to `extract-text-wrappers')
 
 You may also call any of the user functions defined in `extract-text-wrappers'.
 
@@ -484,6 +497,15 @@ EXAMPLES:
 					     (goto-char (nth value positions))))
 			       (:pos (goto-char value))))
 			'skip)
+		  (transform (regexp rep strs &key fixedcase literal subexp start idxs)
+			     (let ((strs (if (stringp strs) (list strs) strs))
+				   (idxs (if (listp idxs) idxs (list idxs))))
+			       (-map-indexed (lambda (idx str)
+					       (if (or (not idxs)
+						       (memq idx idxs))
+						   (replace-regexp-in-string
+						    regexp rep str fixedcase literal subexp start)
+						 str)) strs)))
 		  ,@(cl-loop for (name . code) in extract-text-wrappers
 			     if (> (length code) 1)
 			     collect `(,name (,@(car code)) ,@(cdr code))
