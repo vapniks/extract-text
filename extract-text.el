@@ -331,7 +331,7 @@ These variables are available when evaluating the expressions.
 
 EXPRESSION are elisp forms. They are wrapped in a `progn' and
 compose the body of the wrapper function. This body is executed
-when the function is called by name --e.g. (wrapper arg1 arg2)-- 
+when the function is called by name --e.g. (wrapper arg1 arg2)--
 as part of `extract-text' (which see).
 
 Each wrapper function should return a string or list of strings."
@@ -437,7 +437,7 @@ The following keyword args may be used to specify how to deal with the extractio
 list. 
 
 :REPS    - number of times to repeat the current list of extractions (default 1)
-:NOERROR - if set to 'skip then extractions that throw errors will be ignored, if set to any other 
+:ERROR   - if set to 'skip then extractions that throw errors will be ignored, if set to any other 
            non-nil symbol then that symbol will be returned in place of any extractions that throw
            errors
 :FLATTEN - specify that returned list should be flattened to this depth with `-flatten-n' function 
@@ -449,12 +449,12 @@ This allows you to narrow down the search space for the extraction functions.
 
 EXAMPLES:
 
- (extract-text (regex \"[0-9]+\\.[0-9]+\") :REPS 5 :NOERROR 'NA)
+ (extract-text (regex \"[0-9]+\\.[0-9]+\") :REPS 5 :ERROR 'NA)
  
  explanation: extract the first 5 numbers from the current buffer. 
               If there are fewer than 5 numbers, pad with 'NA.
 
- (extract-text (regex \"[0-9]+\\.[0-9]+\") :REPS 5 :NOERROR 'NA :buffer \"foobar\")
+ (extract-text (regex \"[0-9]+\\.[0-9]+\") :REPS 5 :ERROR 'NA :buffer \"foobar\")
 
  explanation: as above but extract from the buffer named \"foobar\".
 
@@ -464,7 +464,7 @@ EXAMPLES:
                (move :bwdmark 1)
                ((regex \"Amount: *\\([0-9]+\\.[0-9]+\\)\") :REPS 3 :TL \"Address:\" :BR \"Total:\" :INCBR nil :COLS t)
                (regex \"Total: *\\([0-9]+\\.[0-9]+\\)\")
-               :REPS 1000 :NOERROR 'skip)
+               :REPS 1000 :ERROR 'skip)
 
  explanation: repeat the following extraction; extract an address in a rectangle of 4 rows and 25 columns, 
                                                move back to a position before the address
@@ -532,7 +532,7 @@ EXAMPLES:
 			    args3
 			  (let ((args4 args3)) ;need this let form so we can use a symbol 'args4 to access the input
 			    `(let ,(extract-keyword-bindings
-				    'args4 t :REPS :NOERROR :TL :BR (:INCTL t) (:INCBR t) :ROWS :COLS :FLATTEN)
+				    'args4 t :REPS :ERROR :TL :BR (:INCTL t) (:INCBR t) :ROWS :COLS :FLATTEN)
 			       ;; set defaults and get buffer containing text
 			       (let* ((REPS (or REPS 1))
 				      (FLATTEN (or FLATTEN 0))
@@ -541,7 +541,7 @@ EXAMPLES:
 					      (copy-rectangle-to-buffer
 					       TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS)))
 				      allresults positions)
-				 ;; check for errors, and ignore them if NOERROR is non-nil
+				 ;; check for errors, and ignore them if ERROR is non-nil
 				 (with-current-buffer buf2
 				   ;; repeat the extraction for REPS repeats
 				   (cl-loop named 'overreps
@@ -558,13 +558,13 @@ EXAMPLES:
 									(condition-case err
 									    (recurse ,spec)
 									  (error (if (or
-										      (null NOERROR)
-										      (memq NOERROR
+										      (null ERROR)
+										      (memq ERROR
 											    '(skipall stop stopall)))
 										     (signal (car err) (cdr err))
-										   NOERROR)))
+										   ERROR)))
 									results)))))
-						(error (case NOERROR
+						(error (case ERROR
 							 (skipall (setq results nil))
 							 (stopall (cl-return-from 'overreps))
 							 (stop (unless (null results)
