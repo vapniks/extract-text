@@ -266,8 +266,7 @@ an error will be thrown."
     `(let ((,args2 (if (symbolp ,args) (eval ,args) ,args))
 	   (,args3 (if (symbolp ,args) ,args ',args2)))
        (if ,check
-	   (let* ((argskeys (-filter (lambda (x) (and (symbolp x)
-						      (string-match "^:" (symbol-name x))))
+	   (let* ((argskeys (-filter (lambda (x) (keywordp x))
 				     ,args2))
 		  (requiredkeys (mapcar (lambda (x) (if (consp x) (car x) x)) ',keys))
 		  (unusedkeys (-difference argskeys requiredkeys)))
@@ -276,7 +275,7 @@ an error will be thrown."
        (cl-loop for pair in ',keys
 		for key = (if (consp pair) (car pair) pair)
 		for defval = (if (consp pair) (cadr pair))
-		collect (list (if (string-match "^:" (symbol-name key))
+		collect (list (if (keywordp key)
 				  (intern (substring (symbol-name key) 1))
 				key)
 			      (if (memq key ,args2)
@@ -294,9 +293,7 @@ If predicate function PRED is supplied then an error will be thrown if
 PRED returns nil when supplied with the key value as argument."
   (let ((lst (gensym)))
     `(let* ((,lst (eval ,lstsym))
-	    (ind (-find-index (lambda (x)
-				(and (symbolp x)
-				     (string-match "^:" (symbol-name x)))) ,lst)))
+	    (ind (-find-index (lambda (x) (keywordp x)) ,lst)))
        (unless (not ind)
 	 (let ((key (nth ind ,lst))
 	       (val (nth (1+ ind) ,lst)))
@@ -437,7 +434,13 @@ The following keyword args may be used to specify how to deal with the extractio
 list. 
 
 :REPS    - number of times to repeat the current list of extractions (default 1)
-:ERROR   - if set to 'skip then extractions that throw errors will be ignored, if set to any other 
+:ERROR   - can take one of the following values:
+             'skip : extractions that throw errors will be ignored
+             'skipall : if an error is thrown then all extractions within the current repetition will be ignored
+             'stop : if an error is thrown then stop iterating over repetitions, but keep extractions gathered so far
+             'stopall : if an error is thrown then stop iterating over repetitions and ignore all extractions
+                        within the current repetition
+           if any other symbol/value/expression is supplied then that will be used
            non-nil symbol then that symbol will be returned in place of any extractions that throw
            errors
 :FLATTEN - specify that returned list should be flattened to this depth with `-flatten-n' function 
@@ -562,7 +565,10 @@ EXAMPLES:
 										      (memq ERROR
 											    '(skipall stop stopall)))
 										     (signal (car err) (cdr err))
-										   ERROR)))
+										   (if (and (listp ERROR)
+											    (functionp (car ERROR)))
+										       (eval ERROR)
+										     ERROR))))
 									results)))))
 						(error (case ERROR
 							 (skipall (setq results nil))
