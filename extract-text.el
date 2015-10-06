@@ -344,6 +344,15 @@ Each wrapper function should return a string or list of strings."
                          (repeat (sexp :tag "Expression"))))))
 
 ;; TODO: better error handling, don't keep repeating after an error when :NOERROR is non-nil
+;;       Could have 6 different types of error handling:
+;;        1) skip this element
+;;        2) skip all elements within this repetition
+;;           (can be done by having a 'skip error at the next level up, and throwing a normal error)
+;;        3) stop this loop but keep other elements within this repetition
+;;        4) stop this loop and drop all previous elements within this repetition
+;;        5) throw global error
+;;        6) return some fixed symbol/value
+;;       Might want to have different error handling for different elements
 ;;;###autoload
 (cl-defmacro extract-text (&rest args)
   "Extract text from buffer according to specifications in ARGS.
@@ -529,32 +538,45 @@ EXAMPLES:
 				      (FLATTEN (or FLATTEN 0))
 				      (buf2 (if (not (or TL BR)) (current-buffer)
 					      ;; execute the restriction (if any) specified by the TL, BR, etc. 
-					      (goto-char (point-min))
 					      (copy-rectangle-to-buffer
 					       TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS)))
 				      allresults positions)
 				 ;; check for errors, and ignore them if NOERROR is non-nil
 				 (with-current-buffer buf2
 				   ;; repeat the extraction for REPS repeats
-				   (cl-loop for i from 1 to REPS
-					    do (let (results)
-						 ,@(cl-loop for spec in args4
-							    collect
-							    `(setq positions (cons (point) positions)
-								   results
-								   (remove
-								    'skip
-								    (cons
-								     ;; get args for specifying buffer restriction (if any)
-								     (condition-case err
-									 (recurse ,spec)
-								       (error (if NOERROR NOERROR
-										(if (or TL BR) (kill-buffer buf2))
-										(signal (car err) (cdr err)))))
-								     results))))
-						 (unless (null results)
-						   (setq allresults
-							 (cons (-flatten-n 1 (reverse results)) allresults))))))
+				   (cl-loop named 'overreps
+					    for i from 1 to REPS do
+					    (let (results)
+					      (condition-case err2
+						  (progn
+						    ,@(cl-loop 
+						       for spec in args4 collect
+						       `(setq positions (cons (point) positions)
+							      results (remove
+								       'skip
+								       (cons
+									(condition-case err
+									    (recurse ,spec)
+									  (error (if (or
+										      (null NOERROR)
+										      (memq NOERROR
+											    '(skipall stop stopall)))
+										     (signal (car err) (cdr err))
+										   NOERROR)))
+									results)))))
+						(error (case NOERROR
+							 (skipall (setq results nil))
+							 (stopall (cl-return-from 'overreps))
+							 (stop (unless (null results)
+								 (setq allresults
+								       (cons (-flatten-n 1 (reverse results))
+									     allresults)))
+							       (cl-return-from 'overreps))
+							 (t (if (or TL BR) (kill-buffer buf2))
+							    (signal (car err2) (cdr err2))))))
+					      (unless (null results)
+						(setq allresults
+						      (cons (-flatten-n 1 (reverse results)) allresults))))))
 				 (if (or TL BR) (kill-buffer buf2))
 				 (-flatten-n FLATTEN (reverse allresults))))))))
 	   (with-current-buffer buf
