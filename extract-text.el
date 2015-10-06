@@ -440,9 +440,10 @@ list.
              'stop : if an error is thrown then stop iterating over repetitions, but keep extractions gathered so far
              'stopall : if an error is thrown then stop iterating over repetitions and ignore all extractions
                         within the current repetition
-           if any other symbol/value/expression is supplied then that will be used
-           non-nil symbol then that symbol will be returned in place of any extractions that throw
-           errors
+           if any other symbol or value is supplied then that will be used in place of the extraction which
+           threw the error. If you supply a list which can be evalled then it will be evalled when an error 
+           is thrown, and the return value used in place of the extraction. 
+
 :FLATTEN - specify that returned list should be flattened to this depth with `-flatten-n' function 
 
 The following keyword args are passed to `extract-matching-rectangle' (which see) to restrict the
@@ -527,6 +528,8 @@ EXAMPLES:
 			(args3)	;do not be tempted to use &rest here, you'll get infinite recursion!
 			(if (or (not (listp args3))
 				(functionp (car args3))
+				(and (symbolp (car args3))
+				     (subrp (symbol-function (car args3))))
 				(eq (car args3) 'quote)
 				(macrop (car args3))
 				(memq (car args3)
@@ -566,7 +569,11 @@ EXAMPLES:
 											    '(skipall stop stopall)))
 										     (signal (car err) (cdr err))
 										   (if (and (listp ERROR)
-											    (functionp (car ERROR)))
+											    (symbolp (car ERROR))
+											    (or (functionp (car ERROR))
+												(subrp (symbol-function
+													(car ERROR)))
+												(macrop (car ERROR))))
 										       (eval ERROR)
 										     ERROR))))
 									results)))))
