@@ -4,6 +4,23 @@ Bitcoin donations gratefully accepted: 1FgnGFwRES9MGzoieRDWLmLkjqMT3AsjQF
 
 This library provides functions for extracting/scraping text from buffers.
 
+* Functions
+ - `match-strings' : Return a list of all strings matched by last search.
+ - `match-strings-no-properties' : Return a list of all strings matched by last search.
+ - `extract-matching-strings' : Extract strings from current buffer that match subexpressions of REGEXP.
+ - `extract-matching-rectangle' : Extract a rectangle of text (list of strings) from the current buffer.
+ - `copy-rectangle-to-buffer' : Copy a rectangular region of the current buffer to a new buffer.
+* Macros
+ - `extract-text' : Extract text from buffer according to specifications in ARGS.
+ - `extract-text-from-buffers' : Extract text from buffers listed in BUFFERS or matching regexp BUFFERS.
+ - `extract-text-from-files' : Extract text from FILES.
+* Options
+ - `extract-text-wrappers' : A list of wrapper functions that can be used with `extract-text'.
+* Requirements
+Features that might be required by this library:
+
+cl, dash, macro-utils, keyword-arg-macros
+
 * Installation
 
 Put extract-text.el in a directory in your load-path, e.g. ~/.emacs.d/
