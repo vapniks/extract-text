@@ -426,7 +426,8 @@ EXAMPLES:
 		  (rect (tl br &key (inctl t) (incbr t) rows cols noerror idxs)
 			(if (not (or tl (and rows cols))) (setq tl (point)))
 			(extract-matching-rectangle
-			 tl br :inctl inctl :incbr incbr :rows rows :cols cols :noerror noerror :idxs idxs))
+			 tl br :inctl inctl :incbr incbr :rows rows
+			 :cols cols :noerror noerror :idxs idxs))
 		  (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline
 			       bwdline fwdword bwdword fwdmark bwdmark pos)
 			(loop-over-keyword-args
@@ -471,7 +472,8 @@ EXAMPLES:
 				(macrop (car args3))
 				(memq (car args3)
 				      (remove 'nil
-					      (list 'regex 'rect 'move (mapcar 'car extract-text-wrappers)))))
+					      (append '(regex rect move transform)
+						      (mapcar 'car extract-text-wrappers)))))
 			    args3
 			  (let ((args4 args3)) ;need this let form so we can use a symbol 'args4 to access the input
 			    `(let ,(extract-keyword-bindings
