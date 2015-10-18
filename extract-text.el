@@ -262,50 +262,76 @@ found an error will be thrown."
     buf))
 
 ;;;###autoload
-(defcustom extract-text-wrappers nil
+(defcustom extract-text-user-wrappers nil
   "A list of wrapper functions that can be used with `extract-text'.
+These functions complement the ones defined in `extract-text-user-wrappers'.
+
 Each element has the form (NAME ARGLIST EXPRESSION [EXPRESSION ...]),
 and represents a function which extracts text from the current buffer
 and returns it as a string or list of strings.
 
 NAME is a symbol naming the wrapper function.
 
-ARGLIST is a list whose elements have the form (ARGUMENT DEFAULT-VALUE).
-These variables are available when evaluating the expressions.
+ARGLIST is a list of function arguments, and should be parenthesised.
+Full common Lisp arguments specifications are allowed, e.g.
+ (arg1 arg2 &optional (arg3 defaultval) &key foo baa)
 
 EXPRESSION are elisp forms. They are wrapped in a `progn' and
 compose the body of the wrapper function. This body is executed
 when the function is called by name --e.g. (wrapper arg1 arg2)--
 as part of `extract-text' (which see).
 
-Each wrapper function should return a string or list of strings."
+Each wrapper function should return a string or list of strings,
+and may make use of the functions in `extract-text-builtin-wrappers'."
   :group 'extract-text
-  :type  '(repeat (cons (symbol :tag "Wrapper name")
+  :type  '(repeat (cons (symbol :tag "Name")
                         (cons
-                         (repeat :tag "Argument list"
-                                 (list (symbol :tag "Argument name")
-                                       (sexp :tag "Default value")))
-                         (repeat (sexp :tag "Expression"))))))
+			 (restricted-sexp :match-alternatives (listp) :tag "Arglist")
+			 (repeat (sexp :tag "Expression"))))))
 
 ;;;###autoload
-(cl-defmacro extract-text (&rest args)
-  "Extract text from buffer according to specifications in ARGS.
-ARGS should be a list/tree of wrapper functions for extracting bits of text (see below).
-By default the current buffer is used, but you can specify a different buffer by 
-including a :buffer keyword arg in ARGS (as either a buffer or buffer name).
-
-The text extraction is carried out in a sequential and recursive manner according 
-to the elements of ARGS, and the returned results reflect the structure of ARGS. 
-Each element may be either an atom or function call to be evaluated (see available
-function below), a keyword arg & corresponding value (see below), or a list which 
-is then traversed and evaluated recursively.
-This allows for a great amount of flexibility in the extraction specification: by use
-of parentheses and the :FLATTEN arg you can return arbitrary tree structures.
-
-AVAILABLE FUNCTIONS:
-
-As well as the usual elisp functions, the following extra functions are defined within 
-the scope of the evaluation of ARGS, and can be used to extract text or move the cursor:
+(defvar extract-text-builtin-wrappers
+  '((regex (regexp &key count startpos endpos noerror)
+	   (let ((txt (extract-matching-strings
+		       regexp :count count :startpos startpos
+		       :endpos endpos :noerror noerror))
+		 (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
+	     (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)))
+    (rect (tl br &key (inctl t) (incbr t) rows cols noerror idxs)
+	  (if (not (or tl (and rows cols))) (setq tl (point)))
+	  (extract-matching-rectangle
+	   tl br :inctl inctl :incbr incbr :rows rows
+	   :cols cols :noerror noerror :idxs idxs))
+    (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline
+		 bwdline fwdword bwdword fwdmark bwdmark pos)
+	  (loop-over-keyword-args
+	   all (case key
+		 (:fwdregex (if (listp value) (apply 're-search-forward value)
+			      (re-search-forward value)))
+		 (:bwdregex (if (listp value) (apply 're-search-backward value)
+			      (re-search-backward value)))
+		 (:fwdchar (forward-char value))
+		 (:bwdchar (backward-char value))
+		 (:fwdline (forward-line value))
+		 (:bwdline (forward-line (- value)))
+		 (:fwdword (right-word value))
+		 (:bwdword (left-word value))
+		 (:fwdmark (if (last positions value) ;assumes `positions' list is in scope
+			       (goto-char (car (last positions value)))))
+		 (:bwdmark (if (nth value positions) ;assumes `positions' list is in scope
+			       (goto-char (nth value positions))))
+		 (:pos (goto-char value))))
+	  'skip)
+    (transform (regexp rep strs &key fixedcase literal subexp start idxs)
+	       (let ((strs (if (stringp strs) (list strs) strs))
+		     (idxs (if (listp idxs) idxs (list idxs))))
+		 (-map-indexed (lambda (idx str)
+				 (if (or (not idxs)
+					 (memq idx idxs))
+				     (replace-regexp-in-string
+				      regexp rep str fixedcase literal subexp start)
+				   str)) strs))))
+  "A list of builtin wrapper functions that can be used with `extract-text':
 
  (regex regexp &key count startpos endpos noerror)
 This is a wrapper around `extract-matching-strings' (which see).
@@ -361,9 +387,28 @@ Examples:
            (regex \"\\\\([0-9]+\\\\)/\\\\([0-9]+\\\\)/\\\\([0-9]+\\\\)\"))
 
    explanation: extract a date in the form DD/MM/YYYY and convert to an org-timestamp
-                (you may want to add something like this to `extract-text-wrappers')
+                (you may want to add something like this to `extract-text-user-wrappers')")
 
-You may also call any of the user functions defined in `extract-text-wrappers'.
+;;;###autoload
+(cl-defmacro extract-text (&rest args)
+  "Extract text from buffer according to specifications in ARGS.
+ARGS should be a list/tree of wrapper functions for extracting bits of text (see below).
+By default the current buffer is used, but you can specify a different buffer by 
+including a :buffer keyword arg in ARGS (as either a buffer or buffer name).
+
+The text extraction is carried out in a sequential and recursive manner according 
+to the elements of ARGS, and the returned results reflect the structure of ARGS. 
+Each element may be either an atom or function call to be evaluated (see available
+function below), a keyword arg & corresponding value (see below), or a list which 
+is then traversed and evaluated recursively.
+This allows for a great amount of flexibility in the extraction specification: by use
+of parentheses and the :FLATTEN arg you can return arbitrary tree structures.
+
+AVAILABLE FUNCTIONS:
+
+As well as the usual elisp functions, the functions defined in `extract-text-builtin-wrappers',
+and `extract-text-user-wrappers' (which see) are defined within the scope of the evaluation of 
+ARGS, and can be used to extract text or move the cursor.
 
 KEYWORD ARGS:
 
@@ -417,51 +462,8 @@ EXAMPLES:
     `(let* (,@(extract-keyword-bindings 'args2 nil :buffer)
 	    (buf (or buffer (current-buffer))))
        ;; scope in some wrapper functions
-       (cl-flet* ((regex (regexp &key count startpos endpos noerror)
-			 (let ((txt (extract-matching-strings
-				     regexp :count count :startpos startpos
-				     :endpos endpos :noerror noerror))
-			       (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
-			   (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)))
-		  (rect (tl br &key (inctl t) (incbr t) rows cols noerror idxs)
-			(if (not (or tl (and rows cols))) (setq tl (point)))
-			(extract-matching-rectangle
-			 tl br :inctl inctl :incbr incbr :rows rows
-			 :cols cols :noerror noerror :idxs idxs))
-		  (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline
-			       bwdline fwdword bwdword fwdmark bwdmark pos)
-			(loop-over-keyword-args
-			 all (case key
-			       (:fwdregex (if (listp value) (apply 're-search-forward value)
-					    (re-search-forward value)))
-			       (:bwdregex (if (listp value) (apply 're-search-backward value)
-					    (re-search-backward value)))
-			       (:fwdchar (forward-char value))
-			       (:bwdchar (backward-char value))
-			       (:fwdline (forward-line value))
-			       (:bwdline (forward-line (- value)))
-			       (:fwdword (right-word value))
-			       (:bwdword (left-word value))
-			       (:fwdmark (if (last positions value) ;assumes `positions' list is in scope
-					     (goto-char (car (last positions value)))))
-			       (:bwdmark (if (nth value positions) ;assumes `positions' list is in scope
-					     (goto-char (nth value positions))))
-			       (:pos (goto-char value))))
-			'skip)
-		  (transform (regexp rep strs &key fixedcase literal subexp start idxs)
-			     (let ((strs (if (stringp strs) (list strs) strs))
-				   (idxs (if (listp idxs) idxs (list idxs))))
-			       (-map-indexed (lambda (idx str)
-					       (if (or (not idxs)
-						       (memq idx idxs))
-						   (replace-regexp-in-string
-						    regexp rep str fixedcase literal subexp start)
-						 str)) strs)))
-		  ,@(cl-loop for (name . code) in extract-text-wrappers
-			     if (> (length code) 1)
-			     collect `(,name (,@(car code)) ,@(cdr code))
-			     else
-			     collect (list name nil code)))
+       (cl-flet* (,@extract-text-builtin-wrappers
+		  ,@extract-text-user-wrappers)
 	 (cl-macrolet ((recurse
 			(args3)	;do not be tempted to use &rest here, you'll get infinite recursion!
 			(if (or (not (listp args3))
@@ -473,7 +475,7 @@ EXAMPLES:
 				(memq (car args3)
 				      (remove 'nil
 					      (append '(regex rect move transform)
-						      (mapcar 'car extract-text-wrappers)))))
+						      (mapcar 'car extract-text-user-wrappers)))))
 			    args3
 			  (let ((args4 args3)) ;need this let form so we can use a symbol 'args4 to access the input
 			    `(let ,(extract-keyword-bindings
