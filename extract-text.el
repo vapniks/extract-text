@@ -122,7 +122,7 @@ The returned list contains the whole match followed by matches to subexpressions
 of REGEXP (in order).
 
 If STARTPOS is supplied searching starts at that buffer position, otherwise it
-starts from the current position. If ENDPOS is supplied the the match must
+starts from the current position. If ENDPOS is supplied then the match must
 occur before that position.
 By default if no match is found then an error is thrown, unless NOERROR is 
 non-nil in which case nil will be returned."
@@ -320,7 +320,16 @@ and may make use of the functions in `extract-text-builtin-wrappers'."
 			       (goto-char (car (last positions value)))))
 		 (:bwdmark (if (nth value positions) ;assumes `positions' list is in scope
 			       (goto-char (nth value positions))))
-		 (:pos (goto-char value))))
+		 (:pos (goto-char value))
+		 (:col (move-to-column value))
+		 (:row (let ((col (current-column)))
+			 (goto-char (point-min))
+			 (forward-line (1- value))
+			 (move-to-column col t)))
+		 (:rowend (end-of-line))
+		 (:colend (let ((col (current-column)))
+			    (goto-char (point-max))
+			    (move-to-column col t)))))
 	  'skip)
     (transform (regexp rep strs &key fixedcase literal subexp start idxs)
 	       (let ((strs (if (stringp strs) (list strs) strs))
@@ -368,6 +377,12 @@ contain repeats. The keyword args specify the following movements:
                      move function to move forward from the start or backward from the end of 
                      that list. E.g. \":bwdmark 2\" will move the cursor to the position before
                      the 2nd last function call.
+
+   row/col         - move to a particular row/column, while staying in the same column/row that
+                     you started in. Extra whitespace will be added to the row if necessary to 
+                     ensure that the required column exists (see `move-to-column').
+
+   rowend/colend   - move to the end of the current row/column.   
 
  For example (move :bwdmark 3 :fwdregex \"foo\" :fwdword 2) will first move the cursor to the position
  it was in just before the 3rd previous function call, then move to the next occurrence of \"foo\",
