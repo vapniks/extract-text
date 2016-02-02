@@ -262,7 +262,7 @@ The arguments are the same as for `extract-matching-rectangle' apart from
 REPS, NOERROR and JOIN which are not included. If no matching rectangle can be
 found an error will be thrown."
   (let ((rect (extract-matching-rectangle
-	       tl br :inctl inctl :incbr incbr :rows rows :cols cols :noerror nil))
+	       tl br :inctl inctl :incbr incbr :rows rows :cols cols))
 	(buf (generate-new-buffer " *extracted rectangle*")))
     (with-current-buffer buf
       (insert (mapconcat 'identity rect "\n"))
@@ -305,11 +305,11 @@ and may make use of the functions in `extract-text-builtin-wrappers'."
 		       :endpos endpos :error error))
 		 (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
 	     (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)))
-    (rect (tl br &key (inctl t) (incbr t) rows cols noerror idxs)
+    (rect (tl br &key (inctl t) (incbr t) rows cols error idxs)
 	  (if (not (or tl (and rows cols))) (setq tl (point)))
 	  (extract-matching-rectangle
 	   tl br :inctl inctl :incbr incbr :rows rows
-	   :cols cols :noerror noerror :idxs idxs))
+	   :cols cols :error error :idxs idxs))
     (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline bwdline
 		 fwdword bwdword fwdmark bwdmark pos col row rowend colend)
 	  (loop-over-keyword-args
@@ -350,12 +350,12 @@ and may make use of the functions in `extract-text-builtin-wrappers'."
 				   str)) strs))))
   "A list of builtin wrapper functions that can be used with `extract-text':
 
- (regex regexp &key count startpos endpos noerror)
+ (regex regexp &key count startpos endpos error)
 This is a wrapper around `extract-matching-strings' (which see).
 Unlike `extract-matching-strings', if regexp contains subexpressions then only matches 
 to those subexpressions will be returned, otherwise the whole match is returned.
 
- (rect tl br &key (inctl t) (incbr t) rows cols noerror)
+ (rect tl br &key (inctl t) (incbr t) rows cols error)
 This is a wrapper around `extract-matching-rectangle' (which see). It takes exactly the
 same arguments, but also allows the tl argument to be omitted even when the rows & cols
 arguments are omitted, in which case tl is set to the current cursor position.
