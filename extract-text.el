@@ -302,8 +302,8 @@ and may make use of the functions in `extract-text-builtin-wrappers'."
 	  (extract-matching-rectangle
 	   tl br :inctl inctl :incbr incbr :rows rows
 	   :cols cols :noerror noerror :idxs idxs))
-    (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline
-		 bwdline fwdword bwdword fwdmark bwdmark pos)
+    (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline bwdline
+		 fwdword bwdword fwdmark bwdmark pos col row rowend colend)
 	  (loop-over-keyword-args
 	   all (case key
 		 (:fwdregex (if (listp value) (apply 're-search-forward value)
