@@ -299,13 +299,13 @@ and may make use of the functions in `extract-text-builtin-wrappers'."
 
 ;;;###autoload
 (defvar extract-text-builtin-wrappers
-  '((regex (regexp &key count startpos endpos error)
+  '((regex (regexp &key count startpos endpos (error t))
 	   (let ((txt (extract-matching-strings
 		       regexp :count count :startpos startpos
 		       :endpos endpos :error error))
 		 (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
 	     (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)))
-    (rect (tl br &key (inctl t) (incbr t) rows cols error idxs)
+    (rect (tl br &key (inctl t) (incbr t) rows cols (error t) idxs)
 	  (if (not (or tl (and rows cols))) (setq tl (point)))
 	  (extract-matching-rectangle
 	   tl br :inctl inctl :incbr incbr :rows rows
@@ -354,11 +354,15 @@ and may make use of the functions in `extract-text-builtin-wrappers'."
 This is a wrapper around `extract-matching-strings' (which see).
 Unlike `extract-matching-strings', if regexp contains subexpressions then only matches 
 to those subexpressions will be returned, otherwise the whole match is returned.
+Note: to ensure that a 'nil symbol is returned in the results on error set the error arg to ''nil 
+not 'nil or nil
 
  (rect tl br &key (inctl t) (incbr t) rows cols error)
 This is a wrapper around `extract-matching-rectangle' (which see). It takes exactly the
 same arguments, but also allows the tl argument to be omitted even when the rows & cols
 arguments are omitted, in which case tl is set to the current cursor position.
+Note: to ensure that a 'nil symbol is returned in the results on error set the error arg to ''nil 
+not 'nil or nil
 
  (move &rest all &key fwdregex bwdregex fwdchar bwdchar 
       fwdline bwdline fwdword bwdword fwdmark bwdmark pos)
