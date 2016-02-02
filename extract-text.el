@@ -304,7 +304,9 @@ and may make use of the functions in `extract-text-builtin-wrappers'."
 		       regexp :count count :startpos startpos
 		       :endpos endpos :error error))
 		 (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
-	     (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)))
+	     (if (listp txt)
+		 (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)
+	       txt)))
     (rect (tl br &key (inctl t) (incbr t) rows cols (error t) idxs)
 	  (if (not (or tl (and rows cols))) (setq tl (point)))
 	  (extract-matching-rectangle
@@ -598,10 +600,10 @@ You can flatten this list using the `-flatten-n' function (which see)."
 		    (t (error "Invalid argument for files"))))
   `(list
     ,@(cl-loop for file in files
-	       for bufexists = (find-buffer-visiting file)
+	       for bufexists = (buffer-name (find-buffer-visiting file))
 	       for buf = (if (file-readable-p file) (find-file-noselect file))
-	       if buf collect `(prog1 (extract-text :buffer ,buf ,@spec)
-				 (unless ,bufexists (kill-buffer ,buf))))))
+	       if buf collect `(prog1 (extract-text :buffer ,(buffer-name buf) ,@spec)
+				 (unless ,bufexists (kill-buffer ,(buffer-name buf)))))))
 
 (provide 'extract-text)
 
