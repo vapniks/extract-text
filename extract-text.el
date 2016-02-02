@@ -321,7 +321,7 @@ and may make use of the functions in `extract-text-builtin-wrappers'."
 		 (:bwdmark (if (nth value positions) ;assumes `positions' list is in scope
 			       (goto-char (nth value positions))))
 		 (:pos (goto-char value))
-		 (:col (move-to-column value))
+		 (:col (move-to-column value t))
 		 (:row (let ((col (current-column)))
 			 (goto-char (point-min))
 			 (forward-line (1- value))
