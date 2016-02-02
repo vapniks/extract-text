@@ -115,7 +115,7 @@ be the string searched."
 	   collect (match-string-no-properties i str)))
 
 ;;;###autoload
-(cl-defun extract-matching-strings (regexp &key count startpos endpos noerror)
+(cl-defun extract-matching-strings (regexp &key count startpos endpos (error t))
   "Extract strings from current buffer that match subexpressions of REGEXP.
 If COUNT is supplied use the COUNT'th match of REGEXP.
 The returned list contains the whole match followed by matches to subexpressions 
@@ -124,11 +124,16 @@ of REGEXP (in order).
 If STARTPOS is supplied searching starts at that buffer position, otherwise it
 starts from the current position. If ENDPOS is supplied then the match must
 occur before that position.
-By default if no match is found then an error is thrown, unless NOERROR is 
-non-nil in which case nil will be returned."
+By default if no match is found then an error is thrown. If ERROR is set to anything
+other than t (including nil) then that value will be returned if there is an error."
   (if startpos (goto-char startpos))
-  (if (re-search-forward regexp endpos noerror count)
-      (match-strings-no-properties regexp)))
+  (if (condition-case err
+	  (re-search-forward regexp endpos (not error) count)
+	(error (cond ((eql error t)
+		      (signal (car err) (cdr err)))
+		     (t nil))))
+      (match-strings-no-properties regexp)
+    error))
 
 ;;;###autoload
 (cl-defun extract-matching-rectangle (tl br &key (inctl t) (incbr t) rows cols noerror idxs)
@@ -291,10 +296,10 @@ and may make use of the functions in `extract-text-builtin-wrappers'."
 
 ;;;###autoload
 (defvar extract-text-builtin-wrappers
-  '((regex (regexp &key count startpos endpos noerror)
+  '((regex (regexp &key count startpos endpos error)
 	   (let ((txt (extract-matching-strings
 		       regexp :count count :startpos startpos
-		       :endpos endpos :noerror noerror))
+		       :endpos endpos :error error))
 		 (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
 	     (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)))
     (rect (tl br &key (inctl t) (incbr t) rows cols noerror idxs)
