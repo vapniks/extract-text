@@ -136,7 +136,7 @@ other than t (including nil) then that value will be returned if there is an err
     error))
 
 ;;;###autoload
-(cl-defun extract-matching-rectangle (tl br &key (inctl t) (incbr t) rows cols noerror idxs)
+(cl-defun extract-matching-rectangle (tl br &key (inctl t) (incbr t) rows cols (error t) idxs)
   "Extract a rectangle of text (list of strings) from the current buffer.
 The rectangle can be specified in several different ways:
 
@@ -175,7 +175,8 @@ The rectangle can be specified in several different ways:
     If one of TL/BR is missing it will be inferred to be in the same row as the
     other, but COLS cols apart.
 
-If no matching rectangle is found then an error is thrown unless :NOERROR is non-nil.
+If no matching rectangle is found then an error is thrown unless :ERROR is set to
+some other value than t (including nil) in which case that value will be returned instead.
 To return a subset of the rows of the extracted rectangle set the :IDXS argument to
 a list of indices of rows to return (0 indicates 1st row), or just a single number
 to return a single row."
@@ -190,8 +191,9 @@ to return a single row."
 			 (if (match-string 1)
 			     (funcall matchfun 1)
 			   (funcall matchfun 0))
-		       (if noerror 'nomatch
-			 (error "Unable to match regex: %s" regex))))
+		       (if (eql error t)
+			   (error "Unable to match regex: %s" regex)
+			 'nomatch)))
 	     (getpos (arg matchfn)
 		     (cond
 		      ((integerp arg) arg)
@@ -247,7 +249,8 @@ to return a single row."
 		    ((and (or tl2 br2) rows cols)
 		     (extract-rectangle (or tl2 (adjust1 br2 t rows cols))
 					(or br2 (adjust1 tl2 nil rows cols))))))))
-      (cond ((numberp idxs) (-select-by-indices (list idxs) strs))
+      (cond ((memq 'nomatch (list tl2 br2)) error)
+	    ((numberp idxs) (-select-by-indices (list idxs) strs))
 	    ((and (not (null idxs)) (listp idxs)) (-select-by-indices idxs strs))
 	    (t strs)))))
 
