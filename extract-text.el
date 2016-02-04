@@ -600,7 +600,7 @@ You can flatten this list using the `-flatten-n' function (which see)."
 		    (t (error "Invalid argument for files"))))
   `(list
     ,@(cl-loop for file in files
-	       for bufexists = (buffer-name (find-buffer-visiting file))
+	       for bufexists = (find-buffer-visiting file)
 	       for buf = (if (file-readable-p file) (find-file-noselect file))
 	       if buf collect `(prog1 (extract-text :buffer ,(buffer-name buf) ,@spec)
 				 (unless ,bufexists (kill-buffer ,(buffer-name buf)))))))
