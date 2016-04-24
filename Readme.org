@@ -10,6 +10,8 @@ You can use included wrapper functions for picking out individual bits of text, 
 and save them in `extract-text-wrappers'. You can specify how many times to repeat each individual extraction,
 how to handle errors or missing values, restrict the buffer for finding certain extractions, how to structure
 &/or transform the output, etc. See the docstring for `extract-text' for more details.
+
+See the file extract_law-enforcement_data.el for an example use case of scraping law enforcement statistics from pdf files.
 * Functions
  - `match-strings' : Return a list of all strings matched by last search.
  - `match-strings-no-properties' : Return a list of all strings matched by last search.
