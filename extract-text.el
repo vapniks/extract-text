@@ -602,6 +602,7 @@ You can flatten this list using the `-flatten-n' function (which see)."
     ,@(cl-loop for file in files
 	       for bufexists = (find-buffer-visiting file)
 	       for buf = (if (file-readable-p file) (find-file-noselect file))
+	       do (message "Processing %s" file)
 	       if buf collect `(prog1 (extract-text :buffer ,(buffer-name buf) ,@spec)
 				 (unless ,bufexists (kill-buffer ,(buffer-name buf)))))))
 
