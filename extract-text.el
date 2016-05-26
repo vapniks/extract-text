@@ -131,7 +131,7 @@ other than t (including nil) then that value will be returned if there is an err
   (if startpos (goto-char startpos))
   (if (condition-case err
 	  (re-search-forward regexp endpos (not error) count)
-	(error (cond ((eql error t)
+	(error (cond ((eq error t)
 		      (signal (car err) (cdr err)))
 		     (t nil))))
       (match-strings-no-properties regexp)
@@ -193,7 +193,7 @@ to return a single row."
 			 (if (match-string 1)
 			     (funcall matchfun 1)
 			   (funcall matchfun 0))
-		       (if (eql error t)
+		       (if (eq error t)
 			   (error "Unable to match regex: %s" regex)
 			 'nomatch)))
 	     (getpos (arg matchfn)
@@ -492,7 +492,7 @@ EXAMPLES:
     ;; First set the buffer
     `(let* (,@(extract-keyword-bindings 'args2 nil :buffer)
 	    (buf (or buffer (current-buffer))))
-       ;; scope in some wrapper functions
+       ;; scope in some wrapper functions (this is why it needs to be implemented as a macro)
        (cl-flet* (,@extract-text-builtin-wrappers
 		  ,@extract-text-user-wrappers)
 	 (cl-macrolet ((recurse
@@ -505,7 +505,7 @@ EXAMPLES:
 				(macrop (car args3))
 				(memq (car args3)
 				      (remove 'nil
-					      (append '(regex rect move transform)
+					      (append (mapcar 'car extract-text-builtin-wrappers)
 						      (mapcar 'car extract-text-user-wrappers)))))
 			    args3
 			  (let ((args4 args3)) ;need this let form so we can use a symbol 'args4 to access the input
