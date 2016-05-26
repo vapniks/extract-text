@@ -88,6 +88,8 @@
 (require 'dash)
 (require 'keyword-arg-macros)
 
+;;; TODO: have a look at these tools: http://machinelearning.inginf.units.it/data-and-tools
+
 ;;; Code:
 
 ;;;###autoload
@@ -566,7 +568,7 @@ EXAMPLES:
 	     (save-excursion (goto-char (point-min)) (recurse ,args2))))))))
 
 ;;;###autoload
-(defmacro extract-text-from-buffers (buffers &rest spec)
+(cl-defmacro extract-text-from-buffers (buffers &rest spec)
   "Extract text from buffers listed in BUFFERS or matching regexp BUFFERS.
 SPEC is the extraction specification to pass to the `extract-text' function.
 BUFFERS can be either a list of buffers, a list of buffer names, or a regexp
@@ -587,7 +589,7 @@ You can flatten this list using the `-flatten-n' function (which see)."
 	       collect `(extract-text :buffer ,buf ,@spec))))
 
 ;;;###autoload
-(defmacro extract-text-from-files (files &rest spec)
+(cl-defmacro extract-text-from-files (files &rest spec)
   "Extract text from FILES.
 SPEC is the extraction specification to pass to the `extract-text' function.
 FILES can be either a list of filepaths or a wildcard pattern matching several
