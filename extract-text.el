@@ -6,17 +6,17 @@
 ;; Maintainer: Joe Bloggs <vapniks@yahoo.com>
 ;; Copyleft (Ↄ) 2015, Joe Bloggs, all rites reversed.
 ;; Created: 2015-09-09 12:30:53
-;; Version: 0.1
-;; Last-Updated: 2015-09-09 12:30:53
+;; Version: 0.2
+;; Last-Updated: 2016-05-27 16:30:53
 ;;           By: Joe Bloggs
 ;; URL: https://github.com/vapniks/extract-text
 ;; Keywords: extensions
 ;; Compatibility: GNU Emacs 24.5.1
-;; Package-Requires: ((dash "20150829.433") (macro-utils "1.0") (keyword-arg-macros "20151006"))
+;; Package-Requires: ((dash "20150829.433") (macro-utils "1.0") (keyword-arg-macros "20151006") (ido-choose-function "20151021"))
 ;;
 ;; Features that might be required by this library:
 ;;
-;; cl, dash, macro-utils, keyword-arg-macros
+;; cl, dash, macro-utils, keyword-arg-macros, ido-choose-function
 ;;
 
 ;;; This file is NOT part of GNU Emacs
@@ -46,30 +46,33 @@
 ;; simple extractions, but for more complex tasks there is `extract-text'.
 ;; This macro allows complex text extraction specifications using a kind of dsl for text extraction.
 ;; You can use included wrapper functions for picking out individual bits of text, or define your own
-;; and save them in `extract-text-wrappers'. You can specify how many times to repeat each individual extraction,
-;; how to handle errors or missing values, restrict the buffer for finding certain extractions, how to structure
-;; &/or transform the output, etc. See the docstring for `extract-text' for more details.
+;; and save them in `extract-text-user-wrappers' and `extract-text-user-progs'.
+;; You can specify how many times to repeat each individual extraction, how to handle errors or missing values,
+;; restrict the buffer for finding certain extractions, how to structure &/or transform the output, etc.
+;; See the docstring for `extract-text' for more details.
 ;; 
 ;;;;
 
 ;;; Functions:
 ;;
 ;; `match-strings' : Return a list of all strings matched by last search.
-;; `match-strings-no-properties' : Return a list of all strings matched by last search.
+;; `match-strings-no-properties' : Return a list of all strings matched by last search without properties
 ;; `extract-matching-strings' : Extract strings from current buffer that match subexpressions of REGEXP.
 ;; `extract-matching-rectangle' : Extract a rectangle of text (list of strings) from the current buffer.
 ;; `copy-rectangle-to-buffer' : Copy a rectangular region of the current buffer to a new buffer.
+;; `extract-text-from-buffers' : Extract text from buffers listed in BUFFERS or matching regexp BUFFERS.
+;; `extract-text-from-files' : Extract text from FILES.
+;; `extract-text-choose-prog' : Choose item from `extract-text-user-progs', and return arguments for `extract-text'.
+;; `extract-text-compile-prog' : Create compiled version of `extract-text' with arguments PRG applied.
 ;;
 ;;; Macros:
 ;;
-;; `extract-text' : Extract text from buffer according to specifications in ARGS.
-;; `extract-text-from-buffers' : Extract text from buffers listed in BUFFERS or matching regexp BUFFERS.
-;; `extract-text-from-files' : Extract text from FILES.
+;; `extract-text' : Extract text from current buffer according to specifications in ARGS.
 ;;
 ;;; Options: 
 ;;
-;; `extract-text-wrappers' : A list of wrapper functions that can be used with `extract-text'.
-;;
+;; `extract-text-user-wrappers' : A list of wrapper functions that can be used with `extract-text'.
+;; `extract-text-user-progs' : A list of different extraction programs/specifications
 
 ;;; Installation:
 ;;
