@@ -449,6 +449,16 @@ the user to apply to the list of arguments for `extract-text' which are returned
       val)))
 
 ;;;###autoload
+(defun extract-text-compile-prog (prg)
+  "Create compiled version of `extract-text' with arguments PRG applied."
+  (let* ((byte-compile-warnings '(free-vars
+				  unresolved callargs redefine obsolete
+				  noruntime cl-functions
+				  interactive-only lexical make-local
+				  mapcar constants suspicious)))
+    (byte-compile `(lambda nil ,(macroexpand `(extract-text ,@prg))))))
+
+;;;###autoload
 (cl-defmacro extract-text (&rest args)
   "Extract text from buffer according to specifications in ARGS.
 ARGS should be a list/tree of wrapper functions for extracting bits of text (see below).
