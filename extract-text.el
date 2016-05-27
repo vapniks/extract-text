@@ -597,45 +597,49 @@ Explanation: extract the first 5 numbers from the current buffer. If there are f
 	 (save-excursion (goto-char (point-min)) (recurse ,args2))))))
 
 ;;;###autoload
-(cl-defmacro extract-text-from-buffers (buffers &rest spec)
+(defun extract-text-from-buffers (buffers spec)
   "Extract text from buffers listed in BUFFERS or matching regexp BUFFERS.
-SPEC is the extraction specification to pass to the `extract-text' function.
-BUFFERS can be either a list of buffers, a list of buffer names, or a regexp
-matching names of buffers to use.
+SPEC is a quoted list containing the extraction specification for `extract-text'.
+For details of this specification see the documentation for `extract-text'.
+BUFFERS can be either a list of buffers/buffer names, or a regexp matching the names 
+of buffers to use.
 The return value will be a list of lists. Each sublist will be the list returned
 by `extract-text' applied to the corresponding buffer.
 You can flatten this list using the `-flatten-n' function (which see)."
-  (setq buffers (if (stringp buffers)
-		    (cl-loop for buf in (buffer-list)
-			     for name = (buffer-name buf)
-			     when (string-match buffers name)
-			     collect name)
-		  (cl-loop for buf in buffers
-			   if (stringp buf) collect buf
-			   else collect (buffer-name buf))))
-  `(list
-    ,@(cl-loop for buf in buffers
-	       collect `(extract-text :buffer ,buf ,@spec))))
+  (let ((buffers (if (stringp buffers)
+		     (cl-loop for buf in (buffer-list)
+			      for name = (buffer-name buf)
+			      when (string-match buffers name)
+			      collect name)
+		   buffers))
+	(extractfn (extract-text-compile-prog spec)))
+    (cl-loop for buf in buffers
+	     do (message "Processing buffer: %s"
+			 (if (stringp buf) buf (buffer-name buf)))
+	     collect (with-current-buffer buf (funcall extractfn)))))
 
 ;;;###autoload
-(cl-defmacro extract-text-from-files (files &rest spec)
+(defun extract-text-from-files (files spec)
   "Extract text from FILES.
-SPEC is the extraction specification to pass to the `extract-text' function.
+SPEC is a quoted list containing the extraction specification for `extract-text'.
+For details of this specification see the documentation for `extract-text'.
 FILES can be either a list of filepaths or a wildcard pattern matching several
 filepaths (see `file-expand-wildcards').
 The return value will be a list of lists. Each sublist will be the list returned
 by `extract-text' applied to the corresponding file.
 You can flatten this list using the `-flatten-n' function (which see)."
-  (setq files (cond ((stringp files) (file-expand-wildcards files))
-		    ((listp files) files)
-		    (t (error "Invalid argument for files"))))
-  `(list
-    ,@(cl-loop for file in files
-	       for bufexists = (find-buffer-visiting file)
-	       for buf = (if (file-readable-p file) (find-file-noselect file))
-	       do (message "Processing %s" file)
-	       if buf collect `(prog1 (extract-text :buffer ,(buffer-name buf) ,@spec)
-				 (unless ,bufexists (kill-buffer ,(buffer-name buf)))))))
+  (let ((files (cond ((stringp files) (file-expand-wildcards files))
+		     ((listp files) files)
+		     (t (error "Invalid argument for files"))))
+	(extractfn (extract-text-compile-prog spec)))
+    (cl-loop for file in files
+	     for bufexists = (find-buffer-visiting file)
+	     for buf = (if (file-readable-p file) (find-file-noselect file))
+	     do (message "Processing file: %s" file)
+	     if buf collect (prog1 (with-current-buffer buf
+				     (prog1 (funcall extractfn)
+				       (set-buffer-modified-p nil)))
+			      (unless bufexists (kill-buffer buf))))))
 
 (provide 'extract-text)
 
