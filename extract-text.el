@@ -462,10 +462,8 @@ the user to apply to the list of arguments for `extract-text' which are returned
 
 ;;;###autoload
 (cl-defmacro extract-text (&rest args)
-  "Extract text from buffer according to specifications in ARGS.
+  "Extract text from current buffer according to specifications in ARGS.
 ARGS should be a list/tree of wrapper functions for extracting bits of text (see below).
-By default the current buffer is used, but you can specify a different buffer by 
-including a :buffer keyword arg in ARGS (as either a buffer or buffer name).
 
 The text extraction is carried out in a sequential and recursive manner according 
 to the elements of ARGS, and the returned results reflect the structure of ARGS. 
@@ -508,12 +506,7 @@ EXAMPLES:
 
  (extract-text (regex \"[0-9]+\\.[0-9]+\") :REPS 5 :ERROR 'NA)
  
- explanation: extract the first 5 numbers from the current buffer. 
-              If there are fewer than 5 numbers, pad with 'NA.
-
- (extract-text (regex \"[0-9]+\\.[0-9]+\") :REPS 5 :ERROR 'NA :buffer \"foobar\")
-
- explanation: as above but extract from the buffer named \"foobar\".
+Explanation: extract the first 5 numbers from the current buffer. If there are fewer than 5 numbers, pad with 'NA.
 
  A more complex example:
 
@@ -523,89 +516,85 @@ EXAMPLES:
                (regex \"Total: *\\([0-9]+\\.[0-9]+\\)\")
                :REPS 1000 :ERROR 'skip)
 
- explanation: repeat the following extraction; extract an address in a rectangle of 4 rows and 25 columns, 
-                                               move back to a position before the address
-                                               extract three \"Amount\" numbers between \"Address\" and \"Total\"
-                                               extract a \"Total\" number.
-              repeat as many times possible upto 1000 times."
+ Explanation: repeat the following extraction as many times as possible, upto 1000 times
+   1) extract an address in a rectangle of 4 rows and 25 columns, 
+   2) move back to a position before the address
+   3) extract three \"Amount\" numbers between \"Address\" and \"Total\"
+   4) extract a \"Total\" number."
   (let ((args2 args))
-    ;; First set the buffer
-    `(let* (,@(extract-keyword-bindings 'args2 nil :buffer)
-	    (buf (or buffer (current-buffer))))
-       ;; scope in some wrapper functions (this is why it needs to be implemented as a macro)
-       (cl-flet* (,@extract-text-builtin-wrappers
-		  ,@extract-text-user-wrappers)
-	 (cl-macrolet ((recurse
-			(args3)	;do not be tempted to use &rest here, you'll get infinite recursion!
-			(if (or (not (listp args3))
-				(functionp (car args3))
-				(and (symbolp (car args3))
-				     (subrp (symbol-function (car args3))))
-				(eq (car args3) 'quote)
-				(macrop (car args3))
-				(memq (car args3)
-				      (remove 'nil
-					      (append (mapcar 'car extract-text-builtin-wrappers)
-						      (mapcar 'car extract-text-user-wrappers)))))
-			    args3
-			  (let ((args4 args3)) ;need this let form so we can use a symbol 'args4 to access the input
-			    `(let ,(extract-keyword-bindings
-				    'args4 t :REPS :ERROR :TL :BR (:INCTL t) (:INCBR t) :ROWS :COLS :FLATTEN)
-			       ;; set defaults and get buffer containing text
-			       (let* ((REPS (or REPS 1))
-				      (FLATTEN (or FLATTEN 0))
-				      (buf2 (if (not (or TL BR)) (current-buffer)
-					      ;; execute the restriction (if any) specified by the TL, BR, etc. 
-					      (copy-rectangle-to-buffer
-					       TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS)))
-				      allresults positions)
-				 ;; check for errors, and ignore them if ERROR is non-nil
-				 (with-current-buffer buf2
-				   ;; repeat the extraction for REPS repeats
-				   (cl-loop named 'overreps
-					    for i from 1 to REPS do
-					    (let (results)
-					      (condition-case err2
-						  (progn
-						    ,@(cl-loop 
-						       for spec in args4 collect
-						       `(setq positions (cons (point) positions)
-							      results (remove
-								       'skip
-								       (cons
-									(condition-case err
-									    (recurse ,spec)
-									  (error (if (or
-										      (null ERROR)
-										      (memq ERROR
-											    '(skipall stop stopall)))
-										     (signal (car err) (cdr err))
-										   (if (and (listp ERROR)
-											    (symbolp (car ERROR))
-											    (or (functionp (car ERROR))
-												(subrp (symbol-function
-													(car ERROR)))
-												(macrop (car ERROR))))
-										       (eval ERROR)
-										     ERROR))))
-									results)))))
-						(error (case ERROR
-							 (skipall (setq results nil))
-							 (stopall (cl-return-from 'overreps))
-							 (stop (unless (null results)
-								 (setq allresults
-								       (cons (-flatten-n 1 (reverse results))
-									     allresults)))
-							       (cl-return-from 'overreps))
-							 (t (if (or TL BR) (kill-buffer buf2))
-							    (signal (car err2) (cdr err2))))))
-					      (unless (null results)
-						(setq allresults
-						      (cons (-flatten-n 1 (reverse results)) allresults))))))
-				 (if (or TL BR) (kill-buffer buf2))
-				 (-flatten-n FLATTEN (reverse allresults))))))))
-	   (with-current-buffer buf
-	     (save-excursion (goto-char (point-min)) (recurse ,args2))))))))
+    ;; scope in some wrapper functions (this is why it needs to be implemented as a macro)
+    `(cl-flet* (,@extract-text-builtin-wrappers
+		,@extract-text-user-wrappers)
+       (cl-macrolet ((recurse
+		      (args3)	;do not be tempted to use &rest here, you'll get infinite recursion!
+		      (if (or (not (listp args3))
+			      (functionp (car args3))
+			      (and (symbolp (car args3))
+				   (subrp (symbol-function (car args3))))
+			      (eq (car args3) 'quote)
+			      (macrop (car args3))
+			      (memq (car args3)
+				    (remove 'nil
+					    (append (mapcar 'car extract-text-builtin-wrappers)
+						    (mapcar 'car extract-text-user-wrappers)))))
+			  args3
+			(let ((args4 args3)) ;need this let form so we can use a symbol 'args4 to access the input
+			  `(let ,(extract-keyword-bindings
+				  'args4 t :REPS :ERROR :TL :BR (:INCTL t) (:INCBR t) :ROWS :COLS :FLATTEN)
+			     ;; set defaults and get buffer containing text
+			     (let* ((REPS (or REPS 1))
+				    (FLATTEN (or FLATTEN 0))
+				    (buf2 (if (not (or TL BR)) (current-buffer)
+					    ;; execute the restriction (if any) specified by the TL, BR, etc. 
+					    (copy-rectangle-to-buffer
+					     TL BR :inctl INCTL :incbr INCBR :rows ROWS :cols COLS)))
+				    allresults positions)
+			       ;; check for errors, and ignore them if ERROR is non-nil
+			       (with-current-buffer buf2
+				 ;; repeat the extraction for REPS repeats
+				 (cl-loop named 'overreps
+					  for i from 1 to REPS do
+					  (let (results)
+					    (condition-case err2
+						(progn
+						  ,@(cl-loop 
+						     for spec in args4 collect
+						     `(setq positions (cons (point) positions)
+							    results (remove
+								     'skip
+								     (cons
+								      (condition-case err
+									  (recurse ,spec)
+									(error (if (or
+										    (null ERROR)
+										    (memq ERROR
+											  '(skipall stop stopall)))
+										   (signal (car err) (cdr err))
+										 (if (and (listp ERROR)
+											  (symbolp (car ERROR))
+											  (or (functionp (car ERROR))
+											      (subrp (symbol-function
+												      (car ERROR)))
+											      (macrop (car ERROR))))
+										     (eval ERROR)
+										   ERROR))))
+								      results)))))
+					      (error (case ERROR
+						       (skipall (setq results nil))
+						       (stopall (cl-return-from 'overreps))
+						       (stop (unless (null results)
+							       (setq allresults
+								     (cons (-flatten-n 1 (reverse results))
+									   allresults)))
+							     (cl-return-from 'overreps))
+						       (t (if (or TL BR) (kill-buffer buf2))
+							  (signal (car err2) (cdr err2))))))
+					    (unless (null results)
+					      (setq allresults
+						    (cons (-flatten-n 1 (reverse results)) allresults))))))
+			       (if (or TL BR) (kill-buffer buf2))
+			       (-flatten-n FLATTEN (reverse allresults))))))))
+	 (save-excursion (goto-char (point-min)) (recurse ,args2))))))
 
 ;;;###autoload
 (cl-defmacro extract-text-from-buffers (buffers &rest spec)
