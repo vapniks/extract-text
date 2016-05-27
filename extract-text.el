@@ -436,13 +436,15 @@ Examples:
                 (you may want to add something like this to `extract-text-user-wrappers')")
 
 ;;;###autoload
-(defun extract-text-choose-prog nil
+(cl-defun extract-text-choose-prog (&optional (progs extract-text-user-progs))
   "Choose item from `extract-text-user-progs', and return arguments for `extract-text'.
+Alternatively you may supply your own list of programs in the PROGS argument which should 
+be a list in the same form as `extract-text-user-progs'.
 If the item is a command, then its interactive form will be used to obtain arguments from
 the user to apply to the list of arguments for `extract-text' which are returned."
   (let* ((name (ido-completing-read
 		"Extraction program: "
-		(mapcar 'car extract-text-user-progs)))
+		(mapcar 'car progs)))
 	 (val (cdr (assoc-string name extract-text-user-progs))))
     (if (functionp val)
 	(funcall (apply-interactive val))
