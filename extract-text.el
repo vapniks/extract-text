@@ -87,6 +87,7 @@
 (eval-when-compile (require 'cl))
 (require 'dash)
 (require 'keyword-arg-macros)
+(require 'ido-choose-function)
 
 ;;; TODO: have a look at these tools: http://machinelearning.inginf.units.it/data-and-tools
 
@@ -272,9 +273,23 @@ found an error will be thrown."
     buf))
 
 ;;;###autoload
+(defcustom extract-text-user-progs nil
+  "Lists of arguments to use with `extract-text'.
+This list can be used to store useful extraction programs that you might want to reuse.
+Each element is a cons cell whose car is a name or short description, and whose
+cdr is a list of arguments for `extract-text', or an interactive function which returns 
+such a list. The function `extract-text-choose-prog' can be used to prompt the user for
+one of these programs and its arguments (in the case of interactive functions)."
+  :group 'extract-text
+  :type '(repeat (cons (string :tag "Name or short description")
+		       (choice (sexp :tag "List of arguments" :value (nil :REPS 1))
+			       (restricted-sexp :match-alternatives (commandp)
+						:tag "Command")))))
+
+;;;###autoload
 (defcustom extract-text-user-wrappers nil
   "A list of wrapper functions that can be used with `extract-text'.
-These functions complement the ones defined in `extract-text-user-wrappers'.
+These functions complement the ones defined in `extract-text-builtin-wrappers'.
 
 Each element has the form (NAME ARGLIST EXPRESSION [EXPRESSION ...]),
 and represents a function which extracts text from the current buffer
@@ -419,6 +434,19 @@ Examples:
 
    explanation: extract a date in the form DD/MM/YYYY and convert to an org-timestamp
                 (you may want to add something like this to `extract-text-user-wrappers')")
+
+;;;###autoload
+(defun extract-text-choose-prog nil
+  "Choose item from `extract-text-user-progs', and return arguments for `extract-text'.
+If the item is a command, then its interactive form will be used to obtain arguments from
+the user to apply to the list of arguments for `extract-text' which are returned."
+  (let* ((name (ido-completing-read
+		"Extraction program: "
+		(mapcar 'car extract-text-user-progs)))
+	 (val (cdr (assoc-string name extract-text-user-progs))))
+    (if (functionp val)
+	(funcall (apply-interactive val))
+      val)))
 
 ;;;###autoload
 (cl-defmacro extract-text (&rest args)
