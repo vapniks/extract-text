@@ -445,9 +445,8 @@ Alternatively you may supply your own list of programs in the PROGS argument whi
 be a list in the same form as `extract-text-user-progs'.
 If the item is a command, then its interactive form will be used to obtain arguments from
 the user to apply to the list of arguments for `extract-text' which are returned."
-  (let* ((name (ido-completing-read
-		"Extraction program: "
-		(mapcar 'car progs)))
+  (let* ((name (ido-completing-read "Extraction program: "
+				    (mapcar 'car progs)))
 	 (val (cdr (assoc-string name extract-text-user-progs))))
     (if (functionp val)
 	(funcall (apply-interactive val))
@@ -643,6 +642,29 @@ You can flatten this list using the `-flatten-n' function (which see)."
 				     (prog1 (funcall extractfn)
 				       (set-buffer-modified-p nil)))
 			      (unless bufexists (kill-buffer buf))))))
+
+;;;###autoload
+(cl-defun key-values-to-lists (lst &optional missing)
+  "Convert key-value lists LST into a key list and lists of values.
+LST should be a list of lists, each of which contains lists of key-value pairs,
+e.g: '(((\"val1\" 1.2) (\"val2\" 1.9) (\"val3\" 3.1))
+       ((\"val2\" 2.4) (\"val1\" 2.1))
+       ((\"val3\" 5.2) (\"val2\" 3.4)))
+The result will be a list of lists, the first of which contains the keys, and the subsequent
+lists contain corresponding values in the same order as the keys in the first list,
+e.g: '((\"val1\" \"val2\" \"val3\")
+       (1.2 1.9 3.1)
+       (2.1 2.4 nil)
+       (nil 3.4 5.2))
+Missing values for any key will be filled with the MISSING arg (nil by default).
+This can be used to convert lists of key-value pairs into a csv file, or org-table."
+  (let ((headers (mapcar 'car (car lst))))
+    (cl-loop for sublst in lst
+	     do	(setq headers (cl-union headers (mapcar 'car sublst) :test 'equal)))
+    (cons headers
+	  (cl-loop for sublst in lst
+		   collect (cl-loop for key in headers
+				    collect (or (cadr (assoc-string key sublst)) missing))))))
 
 (provide 'extract-text)
 
