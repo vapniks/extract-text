@@ -621,27 +621,116 @@ You can flatten this list using the `-flatten-n' function (which see)."
 	     collect (with-current-buffer buf (funcall extractfn)))))
 
 ;;;###autoload
-(defun extract-text-from-files (files spec)
-  "Extract text from FILES.
+(defun extract-text-from-files (files spec &optional kvpairs export convfn params)
+  "Extract text from FILES according to specification SPEC.
 SPEC is a quoted list containing the extraction specification for `extract-text'.
-For details of this specification see the documentation for `extract-text'.
-FILES can be either a list of filepaths or a wildcard pattern matching several
-filepaths (see `file-expand-wildcards').
+When called interactively an item of `extract-text-user-progs' will be prompted for.
+FILES can be either a list of filepaths or a wildcard pattern matching 
+several filepaths (see `file-expand-wildcards'). When called interactively in `dired-mode'
+any marked files, or the file at point will be used for FILES.
 The return value will be a list of lists. Each sublist will be the list returned
 by `extract-text' applied to the corresponding file.
-You can flatten this list using the `-flatten-n' function (which see)."
-  (let ((files (cond ((stringp files) (file-expand-wildcards files))
-		     ((listp files) files)
-		     (t (error "Invalid argument for files"))))
-	(extractfn (extract-text-compile-prog spec)))
-    (cl-loop for file in files
-	     for bufexists = (find-buffer-visiting file)
-	     for buf = (if (file-readable-p file) (find-file-noselect file))
-	     do (message "Processing file: %s" file)
-	     if buf collect (prog1 (with-current-buffer buf
-				     (prog1 (funcall extractfn)
-				       (set-buffer-modified-p nil)))
-			      (unless bufexists (kill-buffer buf))))))
+You can flatten this list using the `-flatten-n' function (which see).
+The optional EXPORT arg determines other actions to perform with the results: 
+nil (default) - do nothing apart from returning result as list of lists
+'kill - save an org-table of the results to the `kill-ring' 
+'insert - insert an org-table of the results at point
+any other string - save results to the file path specified in EXPORT using CONVFN
+to convert the results. By default the file name extension will be used to choose 
+the correct conversion function (one of `orgtbl-to-tsv' `orgtbl-to-csv' `orgtbl-to-latex' 
+ `orgtbl-to-html' `orgtbl-to-generic' `orgtbl-to-texinfo' `orgtbl-to-orgtbl',
+ or `orgtbl-to-unicode'). You can also use the PARAMS arg to specify parameters to 
+pass to the PARAMS arg of the conversion function (see `orgtbl-to-generic').
+
+If KVPAIRS is non-nil then the results will be interpreted as lists of key-value
+pairs and converted using `key-values-to-lists'."
+  (interactive (let* ((files (if (eq major-mode 'dired-mode)
+				 (save-excursion
+				   (dired-map-over-marks (dired-get-filename) current-prefix-arg))
+			       (ido-read-file-name "Enter wildcard expression matching filenames:\n")))
+		      (prog (extract-text-choose-prog))
+		      (kvpairs (y-or-n-p "Treat results as key-value pairs?"))
+		      (export (let ((response (ido-completing-read
+					       "Export: "
+					       '("none" "to kill ring" "insert at point" "to file (prompt)"))))
+				(cond ((equal response "none") nil)
+				      ((equal response "to kill ring") 'kill)
+				      ((equal response "insert at point") 'insert)
+				      ((equal response "to file (prompt)")
+				       (read-file-name "Filename: ")))))
+		      (convfn (if (stringp export)
+				  (ido-completing-read "Conversion function: "
+						       '("orgtbl-to-tsv" "orgtbl-to-csv" "orgtbl-to-latex"
+							 "orgtbl-to-html" "orgtbl-to-generic"
+							 "orgtbl-to-texinfo" "orgtbl-to-orgtbl"
+							 "orgtbl-to-unicode")
+						       nil t (symbol-name (org-table-get-convfn export)))))
+		      (params (if (and (stringp export) (y-or-n-p "Extra export parameters?"))
+				  (read (concat "'(" (read-string "Parameters: ") ")")))))
+		 (list files prog kvpairs export (intern-soft convfn) params)))
+  (let* ((files (cond ((stringp files) (file-expand-wildcards files))
+		      ((listp files) files)
+		      (t (error "Invalid argument for files"))))
+	 (extractfn (extract-text-compile-prog spec))
+	 (results (cl-loop for file in files
+			   for bufexists = (find-buffer-visiting file)
+			   for buf = (if (file-readable-p file) (find-file-noselect file))
+			   do (message "Processing file: %s" file)
+			   if buf collect (prog1 (with-current-buffer buf
+						   (prog1 (funcall extractfn)
+						     (set-buffer-modified-p nil)))
+					    (unless bufexists (kill-buffer buf)))))
+	 (results2 (if kvpairs (key-values-to-lists results) results)))
+    (cond ((eq export 'kill)
+	   (kill-new (org-table-lisp-to-string results2)))
+	  ((eq export 'insert)
+	   (insert (org-table-lisp-to-string results2)))
+	  ((stringp export)
+	   (let ((convfn (or convfn (org-table-get-convfn export))))
+	     (with-temp-buffer 
+	       (insert (funcall convfn results2 params))
+	       (write-file export))))
+	  (t nil))
+    results2))
+
+;;;###autoload
+(defun org-table-lisp-to-string (lst &optional insert)
+  "Convert an org table stored in list LST into a string.
+LST should be a list of lists as returned by `org-table-to-lisp'.
+If optional arg INSERT is non-nil then insert and align the table at point."
+  (if lst
+      (let* ((ncols (-max (mapcar (lambda (x) (if (listp x) (length x) 1)) lst)))
+             (str (mapconcat (lambda(x)
+                               (if (eq x 'hline) (concat "|" (s-repeat ncols "-|") "\n")
+                                 (concat "| " (mapconcat 'identity x " | " ) "  |\n" )))
+                             lst "")))
+        (if (not insert) str
+          (insert str)
+          (org-table-align)))))
+
+;;;###autoload
+(defun org-table-get-convfn (file)
+  "Return appropriate function for converting org-tables to format matching FILE."
+  (let* ((formats '("orgtbl-to-tsv" "orgtbl-to-csv" "orgtbl-to-latex"
+		    "orgtbl-to-html" "orgtbl-to-generic"
+		    "orgtbl-to-texinfo" "orgtbl-to-orgtbl"
+		    "orgtbl-to-unicode"))
+	 (fileext (and file (file-name-extension file)))
+	 (deffmt-readable
+	   (if fileext
+	       (replace-regexp-in-string
+		"\t" "\\t"
+		(replace-regexp-in-string
+		 "\n" "\\n"
+		 (or (car (delq nil
+				(mapcar
+				 (lambda (f)
+				   (and (org-string-match-p fileext f) f))
+				 formats)))
+		     org-table-export-default-format)
+		 t t) t t)
+	     org-table-export-default-format)))
+    (intern-soft deffmt-readable)))
 
 ;;;###autoload
 (cl-defun key-values-to-lists (lst &optional missing)
