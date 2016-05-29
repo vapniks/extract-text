@@ -53,6 +53,11 @@
 ;; 
 ;;;;
 
+;;; Commands:
+;;
+;; `extract-text-from-files' : Extract text from FILES, and save to file or `kill-ring', or insert as org-table.
+;; `extract-text-from-buffers' : Extract text from BUFFERS and save to file or `kill-ring', or insert as org-table.
+;;
 ;;; Functions:
 ;;
 ;; `match-strings' : Return a list of all strings matched by last search.
@@ -60,8 +65,6 @@
 ;; `extract-matching-strings' : Extract strings from current buffer that match subexpressions of REGEXP.
 ;; `extract-matching-rectangle' : Extract a rectangle of text (list of strings) from the current buffer.
 ;; `copy-rectangle-to-buffer' : Copy a rectangular region of the current buffer to a new buffer.
-;; `extract-text-from-buffers' : Extract text from buffers listed in BUFFERS or matching regexp BUFFERS.
-;; `extract-text-from-files' : Extract text from FILES.
 ;; `extract-text-choose-prog' : Choose item from `extract-text-user-progs', and return arguments for `extract-text'.
 ;; `extract-text-compile-prog' : Create compiled version of `extract-text' with arguments PRG applied.
 ;;
@@ -599,26 +602,75 @@ Explanation: extract the first 5 numbers from the current buffer. If there are f
 	 (save-excursion (goto-char (point-min)) (recurse ,args2))))))
 
 ;;;###autoload
-(defun extract-text-from-buffers (buffers spec)
+(defun extract-text-from-buffers (buffers spec &optional kvpairs export convfn params)
   "Extract text from buffers listed in BUFFERS or matching regexp BUFFERS.
 SPEC is a quoted list containing the extraction specification for `extract-text'.
-For details of this specification see the documentation for `extract-text'.
+When called interactively an item of `extract-text-user-progs' will be prompted for.
 BUFFERS can be either a list of buffers/buffer names, or a regexp matching the names 
-of buffers to use.
+of buffers to use. When called interactively in `bs-mode' (buffer-show mode) any marked 
+buffers will be used, otherwise a regexp will be prompted for.
 The return value will be a list of lists. Each sublist will be the list returned
-by `extract-text' applied to the corresponding buffer.
-You can flatten this list using the `-flatten-n' function (which see)."
-  (let ((buffers (if (stringp buffers)
-		     (cl-loop for buf in (buffer-list)
-			      for name = (buffer-name buf)
-			      when (string-match buffers name)
-			      collect name)
-		   buffers))
-	(extractfn (extract-text-compile-prog spec)))
-    (cl-loop for buf in buffers
-	     do (message "Processing buffer: %s"
-			 (if (stringp buf) buf (buffer-name buf)))
-	     collect (with-current-buffer buf (funcall extractfn)))))
+by `extract-text' applied to the corresponding file.
+You can flatten this list using the `-flatten-n' function (which see).
+The optional EXPORT arg determines other actions to perform with the results: 
+nil (default) - do nothing apart from returning result as list of lists
+'kill - save an org-table of the results to the `kill-ring' 
+'insert - insert an org-table of the results at point
+any other string - save results to the file path specified in EXPORT using CONVFN
+to convert the results. By default the file name extension will be used to choose 
+the correct conversion function (one of `orgtbl-to-tsv' `orgtbl-to-csv' `orgtbl-to-latex' 
+ `orgtbl-to-html' `orgtbl-to-generic' `orgtbl-to-texinfo' `orgtbl-to-orgtbl',
+ or `orgtbl-to-unicode'). You can also use the PARAMS arg to specify parameters to 
+pass to the PARAMS arg of the conversion function (see `orgtbl-to-generic').
+
+If KVPAIRS is non-nil then the results will be interpreted as lists of key-value
+pairs and converted using `key-values-to-lists'."
+  (interactive (let* ((buffers (if (and (eq major-mode 'bs-mode) bs--marked-buffers)
+				   bs--marked-buffers
+				 (read-regexp "Enter regexp matching buffer names: ")))
+		      (prog (extract-text-choose-prog))
+		      (kvpairs (y-or-n-p "Treat results as key-value pairs?"))
+		      (export (let ((response (ido-completing-read
+					       "Export: "
+					       '("none" "to kill ring" "insert at point" "to file (prompt)"))))
+				(cond ((equal response "none") nil)
+				      ((equal response "to kill ring") 'kill)
+				      ((equal response "insert at point") 'insert)
+				      ((equal response "to file (prompt)")
+				       (read-file-name "Filename: ")))))
+		      (convfn (if (stringp export)
+				  (ido-completing-read "Conversion function: "
+						       '("orgtbl-to-tsv" "orgtbl-to-csv" "orgtbl-to-latex"
+							 "orgtbl-to-html" "orgtbl-to-generic"
+							 "orgtbl-to-texinfo" "orgtbl-to-orgtbl"
+							 "orgtbl-to-unicode")
+						       nil t (symbol-name (org-table-get-convfn export)))))
+		      (params (if (and (stringp export) (y-or-n-p "Extra export parameters?"))
+				  (read (concat "'(" (read-string "Parameters: ") ")")))))
+		 (list buffers prog kvpairs export (intern-soft convfn) params)))
+  (let* ((buffers (if (stringp buffers)
+		      (cl-loop for buf in (buffer-list)
+			       for name = (buffer-name buf)
+			       when (string-match buffers name)
+			       collect name)
+		    buffers))
+	 (extractfn (extract-text-compile-prog spec))
+	 (results (cl-loop for buf in buffers
+			   do (message "Processing buffer: %s"
+				       (if (stringp buf) buf (buffer-name buf)))
+			   collect (with-current-buffer buf (funcall extractfn))))
+	 (results2 (if kvpairs (key-values-to-lists results) results)))
+    (cond ((eq export 'kill)
+	   (kill-new (org-table-lisp-to-string results2)))
+	  ((eq export 'insert)
+	   (insert (org-table-lisp-to-string results2)))
+	  ((stringp export)
+	   (let ((convfn (or convfn (org-table-get-convfn export))))
+	     (with-temp-buffer 
+	       (insert (funcall convfn results2 params))
+	       (write-file export))))
+	  (t nil))
+    results2))
 
 ;;;###autoload
 (defun extract-text-from-files (files spec &optional kvpairs export convfn params)
@@ -627,7 +679,8 @@ SPEC is a quoted list containing the extraction specification for `extract-text'
 When called interactively an item of `extract-text-user-progs' will be prompted for.
 FILES can be either a list of filepaths or a wildcard pattern matching 
 several filepaths (see `file-expand-wildcards'). When called interactively in `dired-mode'
-any marked files, or the file at point will be used for FILES.
+any marked files, or the file at point will be used for FILES, otherwise a wildcard
+pattern will be prompted for.
 The return value will be a list of lists. Each sublist will be the list returned
 by `extract-text' applied to the corresponding file.
 You can flatten this list using the `-flatten-n' function (which see).
