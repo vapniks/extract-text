@@ -656,8 +656,8 @@ pairs and converted using `key-values-to-lists'."
 		    buffers))
 	 (extractfn (extract-text-compile-prog spec))
 	 (results (cl-loop for buf in buffers
-			   do (message "Processing buffer: %s"
-				       (if (stringp buf) buf (buffer-name buf)))
+			   for name = (if (stringp buf) buf (buffer-name buf))
+			   do (message "Processing buffer: %s" name)
 			   collect (with-current-buffer buf (funcall extractfn))))
 	 (results2 (if kvpairs (key-values-to-lists results) results)))
     (cond ((eq export 'kill)
@@ -675,25 +675,30 @@ pairs and converted using `key-values-to-lists'."
 ;;;###autoload
 (defun extract-text-from-files (files spec &optional kvpairs export convfn params)
   "Extract text from FILES according to specification SPEC.
+
 SPEC is a quoted list containing the extraction specification for `extract-text'.
 When called interactively an item of `extract-text-user-progs' will be prompted for.
 FILES can be either a list of filepaths or a wildcard pattern matching 
 several filepaths (see `file-expand-wildcards'). When called interactively in `dired-mode'
 any marked files, or the file at point will be used for FILES, otherwise a wildcard
-pattern will be prompted for.
+pattern will be prompted for. The current file name is scoped into the `name' variable 
+during processing of SPEC so you can make use of it in the results.
+
 The return value will be a list of lists. Each sublist will be the list returned
 by `extract-text' applied to the corresponding file.
 You can flatten this list using the `-flatten-n' function (which see).
+
 The optional EXPORT arg determines other actions to perform with the results: 
-nil (default) - do nothing apart from returning result as list of lists
-'kill - save an org-table of the results to the `kill-ring' 
-'insert - insert an org-table of the results at point
-any other string - save results to the file path specified in EXPORT using CONVFN
-to convert the results. By default the file name extension will be used to choose 
-the correct conversion function (one of `orgtbl-to-tsv' `orgtbl-to-csv' `orgtbl-to-latex' 
- `orgtbl-to-html' `orgtbl-to-generic' `orgtbl-to-texinfo' `orgtbl-to-orgtbl',
- or `orgtbl-to-unicode'). You can also use the PARAMS arg to specify parameters to 
-pass to the PARAMS arg of the conversion function (see `orgtbl-to-generic').
+  nil (default) - do nothing apart from returning result as list of lists
+  'kill - save an org-table of the results to the `kill-ring' 
+  'insert - insert an org-table of the results at point
+  any other string - save results to the file path specified in EXPORT using CONVFN
+                     to convert the results. By default the file name extension will be 
+                     used to choose the correct conversion function (one of `orgtbl-to-tsv' 
+                     `orgtbl-to-csv' `orgtbl-to-latex' `orgtbl-to-html' `orgtbl-to-generic' 
+                     `orgtbl-to-texinfo' `orgtbl-to-orgtbl', or `orgtbl-to-unicode'). 
+                     You can also use the PARAMS arg to specify parameters to pass to the 
+                     PARAMS arg of the conversion function (see `orgtbl-to-generic').
 
 If KVPAIRS is non-nil then the results will be interpreted as lists of key-value
 pairs and converted using `key-values-to-lists'."
@@ -712,12 +717,13 @@ pairs and converted using `key-values-to-lists'."
 				      ((equal response "to file (prompt)")
 				       (read-file-name "Filename: ")))))
 		      (convfn (if (stringp export)
-				  (ido-completing-read "Conversion function: "
-						       '("orgtbl-to-tsv" "orgtbl-to-csv" "orgtbl-to-latex"
-							 "orgtbl-to-html" "orgtbl-to-generic"
-							 "orgtbl-to-texinfo" "orgtbl-to-orgtbl"
-							 "orgtbl-to-unicode")
-						       nil t (symbol-name (org-table-get-convfn export)))))
+				  (ido-completing-read
+				   "Conversion function: "
+				   '("orgtbl-to-tsv" "orgtbl-to-csv" "orgtbl-to-latex"
+				     "orgtbl-to-html" "orgtbl-to-generic"
+				     "orgtbl-to-texinfo" "orgtbl-to-orgtbl"
+				     "orgtbl-to-unicode")
+				   nil t (symbol-name (org-table-get-convfn export)))))
 		      (params (if (and (stringp export) (y-or-n-p "Extra export parameters?"))
 				  (read (concat "'(" (read-string "Parameters: ") ")")))))
 		 (list files prog kvpairs export (intern-soft convfn) params)))
@@ -725,10 +731,10 @@ pairs and converted using `key-values-to-lists'."
 		      ((listp files) files)
 		      (t (error "Invalid argument for files"))))
 	 (extractfn (extract-text-compile-prog spec))
-	 (results (cl-loop for file in files
-			   for bufexists = (find-buffer-visiting file)
-			   for buf = (if (file-readable-p file) (find-file-noselect file))
-			   do (message "Processing file: %s" file)
+	 (results (cl-loop for name in files
+			   for bufexists = (find-buffer-visiting name)
+			   for buf = (if (file-readable-p name) (find-file-noselect name))
+			   do (message "Processing file: %s" name)
 			   if buf collect (prog1 (with-current-buffer buf
 						   (prog1 (funcall extractfn)
 						     (set-buffer-modified-p nil)))
