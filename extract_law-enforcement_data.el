@@ -20,18 +20,16 @@
 ;; easily without this elisp code and then appended to the .csv file
 
 ;; List of files and associated years
-(setq lawfilepairs '((1995 . "95sec6.pdf")
-		     (1996 . "96sec6.pdf")
-		     (1997 . "97sec6.pdf")
-		     (1998 . "98sec6.pdf")
-		     (1999 . "99sec6.pdf")
-		     (2000 . "00sec6.pdf")
-		     (2001 . "01sec6.pdf")
-		     (2002 . "02sec6.pdf")
-		     (2003 . "03sec6.pdf")
-		     (2004 . "CIUS_2004_Section6.pdf"))
-      ;; .csv output file
-      lawcsvfile "US_law-enforcement_employees_1995-2004.csv")
+(setq lawfilepairs '(("1995" . "95sec6.pdf")
+		     ("1996" . "96sec6.pdf")
+		     ("1997" . "97sec6.pdf")
+		     ("1998" . "98sec6.pdf")
+		     ("1999" . "99sec6.pdf")
+		     ("2000" . "00sec6.pdf")
+		     ("2001" . "01sec6.pdf")
+		     ("2002" . "02sec6.pdf")
+		     ("2003" . "03sec6.pdf")
+		     ("2004" . "CIUS_2004_Section6.pdf")))
 
 ;; Convert the pdf files to text files
 (dolist (filepair lawfilepairs)
@@ -60,41 +58,25 @@
 
 
 ;; Extract the data
-(let* ((years (mapcar 'car lawfilepairs))
-       (files (mapcar (lambda (x)
-			(replace-regexp-in-string "\\.pdf" ".txt" (cdr x)))
-		      lawfilepairs))
-       ;; extract the data
-       (data (eval `(extract-text-from-files
-		     ,files
-		     ;; first regex command matches state name
-		     ((regex "\\([A-Z ]+\\):? [0-9]+ *agencies;")
-		      ;; second regex command matches total number of law enforcement employees
-		      (regex "[Pp]opulation [0-9,]+:?[ .]+\\([0-9,]+\\)")
-		      ;; restrict each matching pair to the rectangle defined by the parameters below
-		      :TL "[A-Z][A-Z ]*:? [0-9]+ *agencies;" :COLS 55 :ROWS 3)
-		     ;; maximum of 52 repeats
-		     :REPS 52
-		     ;; stop when no more matches can be found
-		     :ERROR 'stop
-		     ;; flatten the results by 1 level
-		     :FLATTEN 1))))
-  ;; now insert the data in .csv format into a temporary buffer:
-  (with-temp-buffer
-    ;; insert column headers
-    (insert "state,total employees,year\n")
-    ;; loop over data extracted from each file
-    (cl-loop for lst in data
-	     for year in years
-	     ;; loop over each record in the current list/file
-	     do (mapc (lambda (x)
-			;; insert data:
-			(insert (car x) ","
-				;; remove comma's from employee figures
-				(replace-regexp-in-string "," "" (cadr x)) ","
-				;; convert year to string
-				(number-to-string year) "\n"))
-		      lst))
-    ;; write the data to a .csv file
-    (write-file lawcsvfile)))
+(extract-text-from-files
+ (mapcar (lambda (x) (replace-regexp-in-string "\\.pdf" ".txt" (cdr x))) lawfilepairs)
+ '(( ;; match the state name
+    (regex "\\([A-Z ]+\\):? [0-9]+ *agencies;")
+    ;; get year associated with the current file
+    (car (rassoc (replace-regexp-in-string "\\.txt" ".pdf" name) lawfilepairs))
+    ;; match total number of law enforcement employees
+    (regex "[Pp]opulation [0-9,]+:?[ .]+\\([0-9,]+\\)")
+    ;; restrict each matching pair to the rectangle defined by the parameters below
+    :TL "[A-Z][A-Z ]*:? [0-9]+ *agencies;" :COLS 55 :ROWS 3)
+   ;; maximum of 52 repeats
+   :REPS 52
+   ;; stop when no more matches can be found
+   :ERROR 'stop
+   ;; flatten the results by 1 level
+   :FLATTEN 1)
+ ;; join the results together and add a header line
+ (lambda (res) (nconc '(("State" "Year" "Employees"))
+		      (-flatten-1 res)))
+ ;; save as a .csv file
+ "US_law-enforcement_employees_1995-2004.csv")
 
