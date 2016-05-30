@@ -615,6 +615,34 @@ Explanation: extract the first 5 numbers from the current buffer. If there are f
 	 (save-excursion (goto-char (point-min)) (recurse ,args2))))))
 
 ;;;###autoload
+(defun extract-text-from-current-buffer (spec &optional postproc export convfn params)
+  "Extract text from the current buffer.
+
+Arguments SPEC, POSTPROC, EXPORT, CONVFN & PARAMS are the same as for `extract-text-from-buffers'."
+  (interactive (let* ((prog (extract-text-choose-prog))
+		      (spec (car prog))
+		      (postproc (second prog))
+		      (export (let ((response (ido-completing-read
+					       "Export: "
+					       '("none" "to kill ring" "insert at point" "to file (prompt)"))))
+				(cond ((equal response "none") nil)
+				      ((equal response "to kill ring") 'kill)
+				      ((equal response "insert at point") 'insert)
+				      ((equal response "to file (prompt)")
+				       (read-file-name "Filename: ")))))
+		      (convfn (if (stringp export)
+				  (ido-completing-read "Conversion function: "
+						       '("orgtbl-to-tsv" "orgtbl-to-csv" "orgtbl-to-latex"
+							 "orgtbl-to-html" "orgtbl-to-generic"
+							 "orgtbl-to-texinfo" "orgtbl-to-orgtbl"
+							 "orgtbl-to-unicode")
+						       nil t (symbol-name (org-table-get-convfn export)))))
+		      (params (if (and (stringp export) (y-or-n-p "Extra export parameters?"))
+				  (read (concat "'(" (read-string "Parameters: ") ")")))))
+		 (list spec postproc export (intern-soft convfn) params)))
+  (extract-text-from-buffers (list (current-buffer)) spec postproc export convfn params))
+
+;;;###autoload
 (defun extract-text-from-buffers (buffers spec &optional postproc export convfn params)
   "Extract text from buffers listed in BUFFERS or matching regexp BUFFERS.
 
