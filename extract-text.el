@@ -602,14 +602,14 @@ Explanation: extract the first 5 numbers from the current buffer. If there are f
 						       (stopall (cl-return-from 'overreps))
 						       (stop (unless (null results)
 							       (setq allresults
-								     (cons (-flatten-n 1 (reverse results))
+								     (cons (-flatten-1 (reverse results))
 									   allresults)))
 							     (cl-return-from 'overreps))
 						       (t (if (or TL BR) (kill-buffer buf2))
 							  (signal (car err2) (cdr err2))))))
 					    (unless (null results)
 					      (setq allresults
-						    (cons (-flatten-n 1 (reverse results)) allresults))))))
+						    (cons (-flatten-1 (reverse results)) allresults))))))
 			       (if (or TL BR) (kill-buffer buf2))
 			       (-flatten-n FLATTEN (reverse allresults))))))))
 	 (save-excursion (goto-char (point-min)) (recurse ,args2))))))
