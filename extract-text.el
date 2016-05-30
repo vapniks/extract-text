@@ -289,8 +289,9 @@ Each element is a list of three items:
  3) An optional postprocessing function to rearrange the list of results returned by
     `extract-text-from-buffers' and `extract-text-from-files' before they are exported
     to an org-table or file (e.g. concatenate the results with `-flatten-1' or extract
-    column headers with `key-values-to-lists'). The function should take the list of 
-    results to be processed as its only argument, and return the rearranged list.
+    column headers with `key-values-to-lists', or add a row of headers). 
+    The function should take the list of results to be processed as its only argument, 
+    and return the rearranged list.
 
 The function `extract-text-choose-prog' can be used to prompt the user for
 one of these programs and its arguments (in the case of interactive functions)."
