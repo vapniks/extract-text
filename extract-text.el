@@ -300,7 +300,7 @@ one of these programs and its arguments (in the case of interactive functions)."
 		       (choice (sexp :tag "List of arguments" :value (nil :REPS 1))
 			       (restricted-sexp :match-alternatives (commandp)
 						:tag "Command"))
-		       (function :tag "Postprocessing function"))))
+		       (function :tag "Postprocessing function" :value "identity"))))
 
 ;;;###autoload
 (defcustom extract-text-user-wrappers nil
