@@ -282,15 +282,24 @@ found an error will be thrown."
 (defcustom extract-text-user-progs nil
   "Lists of arguments to use with `extract-text'.
 This list can be used to store useful extraction programs that you might want to reuse.
-Each element is a cons cell whose car is a name or short description, and whose
-cdr is a list of arguments for `extract-text', or an interactive function which returns 
-such a list. The function `extract-text-choose-prog' can be used to prompt the user for
+Each element is a list of three items:
+ 1) A name or short description of the extraction.
+ 2) A list of arguments for `extract-text', or an interactive function which returns 
+    such a list. 
+ 3) An optional postprocessing function to rearrange the list of results returned by
+    `extract-text-from-buffers' and `extract-text-from-files' before they are exported
+    to an org-table or file (e.g. concatenate the results with `-flatten-1' or extract
+    column headers with `key-values-to-lists'). The function should take the list of 
+    results to be processed as its only argument, and return the rearranged list.
+
+The function `extract-text-choose-prog' can be used to prompt the user for
 one of these programs and its arguments (in the case of interactive functions)."
   :group 'extract-text
-  :type '(repeat (cons (string :tag "Name or short description")
+  :type '(repeat (list (string :tag "Name or short description")
 		       (choice (sexp :tag "List of arguments" :value (nil :REPS 1))
 			       (restricted-sexp :match-alternatives (commandp)
-						:tag "Command")))))
+						:tag "Command"))
+		       (function :tag "Postprocessing function"))))
 
 ;;;###autoload
 (defcustom extract-text-user-wrappers nil
@@ -450,10 +459,13 @@ If the item is a command, then its interactive form will be used to obtain argum
 the user to apply to the list of arguments for `extract-text' which are returned."
   (let* ((name (ido-completing-read "Extraction program: "
 				    (mapcar 'car progs)))
-	 (val (cdr (assoc-string name extract-text-user-progs))))
-    (if (functionp val)
-	(funcall (apply-interactive val))
-      val)))
+	 (all (assoc-string name extract-text-user-progs))
+	 (prog (second all))
+	 (postproc (third all)))
+    (list (if (functionp prog)
+	      (funcall (apply-interactive prog))
+	    prog)
+	  postproc)))
 
 ;;;###autoload
 (defun extract-text-compile-prog (prg)
@@ -602,34 +614,40 @@ Explanation: extract the first 5 numbers from the current buffer. If there are f
 	 (save-excursion (goto-char (point-min)) (recurse ,args2))))))
 
 ;;;###autoload
-(defun extract-text-from-buffers (buffers spec &optional kvpairs export convfn params)
+(defun extract-text-from-buffers (buffers spec &optional postproc export convfn params)
   "Extract text from buffers listed in BUFFERS or matching regexp BUFFERS.
+
 SPEC is a quoted list containing the extraction specification for `extract-text'.
 When called interactively an item of `extract-text-user-progs' will be prompted for.
 BUFFERS can be either a list of buffers/buffer names, or a regexp matching the names 
 of buffers to use. When called interactively in `bs-mode' (buffer-show mode) any marked 
 buffers will be used, otherwise a regexp will be prompted for.
-The return value will be a list of lists. Each sublist will be the list returned
-by `extract-text' applied to the corresponding file.
-You can flatten this list using the `-flatten-n' function (which see).
-The optional EXPORT arg determines other actions to perform with the results: 
-nil (default) - do nothing apart from returning result as list of lists
-'kill - save an org-table of the results to the `kill-ring' 
-'insert - insert an org-table of the results at point
-any other string - save results to the file path specified in EXPORT using CONVFN
-to convert the results. By default the file name extension will be used to choose 
-the correct conversion function (one of `orgtbl-to-tsv' `orgtbl-to-csv' `orgtbl-to-latex' 
- `orgtbl-to-html' `orgtbl-to-generic' `orgtbl-to-texinfo' `orgtbl-to-orgtbl',
- or `orgtbl-to-unicode'). You can also use the PARAMS arg to specify parameters to 
-pass to the PARAMS arg of the conversion function (see `orgtbl-to-generic').
+The current buffer name is scoped into the `name' variable during processing of SPEC so 
+you can make use of it in the results.
 
-If KVPAIRS is non-nil then the results will be interpreted as lists of key-value
-pairs and converted using `key-values-to-lists'."
+The return value will be a list of lists. Each sublist will be the list returned
+by `extract-text' applied to the corresponding file. If you are going to export 
+this list to an org-table or to a file it might not be in the form you want.
+In this case you can use the POSTPROC argument to specify a function to apply to the
+list before exporting it, e.g. `key-values-to-lists' or `-flatten-1'.
+
+The optional EXPORT arg determines other actions to perform with the results: 
+  nil (default) - do nothing apart from returning result as list of lists
+  'kill - save an org-table of the results to the `kill-ring' 
+  'insert - insert an org-table of the results at point
+  any other string - save results to the file path specified in EXPORT using CONVFN
+                     to convert the results. By default the file name extension will be 
+                     used to choose the correct conversion function (one of `orgtbl-to-tsv' 
+                     `orgtbl-to-csv' `orgtbl-to-latex' `orgtbl-to-html' `orgtbl-to-generic' 
+                     `orgtbl-to-texinfo' `orgtbl-to-orgtbl', or `orgtbl-to-unicode'). 
+                     You can also use the PARAMS arg to specify parameters to pass to the 
+                     PARAMS arg of the conversion function (see `orgtbl-to-generic')."
   (interactive (let* ((buffers (if (and (eq major-mode 'bs-mode) bs--marked-buffers)
 				   bs--marked-buffers
 				 (read-regexp "Enter regexp matching buffer names: ")))
 		      (prog (extract-text-choose-prog))
-		      (kvpairs (y-or-n-p "Treat results as key-value pairs?"))
+		      (spec (car prog))
+		      (postproc (second prog))
 		      (export (let ((response (ido-completing-read
 					       "Export: "
 					       '("none" "to kill ring" "insert at point" "to file (prompt)"))))
@@ -647,7 +665,7 @@ pairs and converted using `key-values-to-lists'."
 						       nil t (symbol-name (org-table-get-convfn export)))))
 		      (params (if (and (stringp export) (y-or-n-p "Extra export parameters?"))
 				  (read (concat "'(" (read-string "Parameters: ") ")")))))
-		 (list buffers prog kvpairs export (intern-soft convfn) params)))
+		 (list buffers spec postproc export (intern-soft convfn) params)))
   (let* ((buffers (if (stringp buffers)
 		      (cl-loop for buf in (buffer-list)
 			       for name = (buffer-name buf)
@@ -659,10 +677,11 @@ pairs and converted using `key-values-to-lists'."
 			   for name = (if (stringp buf) buf (buffer-name buf))
 			   do (message "Processing buffer: %s" name)
 			   collect (with-current-buffer buf (funcall extractfn))))
-	 (results2 (if kvpairs (key-values-to-lists results) results)))
+	 (results2 (if postproc (funcall postproc results) results)))
     (cond ((eq export 'kill)
 	   (kill-new (org-table-lisp-to-string results2)))
 	  ((eq export 'insert)
+	   (if (eq major-mode 'bs-mode) (bs-kill))
 	   (insert (org-table-lisp-to-string results2)))
 	  ((stringp export)
 	   (let ((convfn (or convfn (org-table-get-convfn export))))
@@ -673,7 +692,7 @@ pairs and converted using `key-values-to-lists'."
     results2))
 
 ;;;###autoload
-(defun extract-text-from-files (files spec &optional kvpairs export convfn params)
+(defun extract-text-from-files (files spec &optional postproc export convfn params)
   "Extract text from FILES according to specification SPEC.
 
 SPEC is a quoted list containing the extraction specification for `extract-text'.
@@ -684,30 +703,14 @@ any marked files, or the file at point will be used for FILES, otherwise a wildc
 pattern will be prompted for. The current file name is scoped into the `name' variable 
 during processing of SPEC so you can make use of it in the results.
 
-The return value will be a list of lists. Each sublist will be the list returned
-by `extract-text' applied to the corresponding file.
-You can flatten this list using the `-flatten-n' function (which see).
-
-The optional EXPORT arg determines other actions to perform with the results: 
-  nil (default) - do nothing apart from returning result as list of lists
-  'kill - save an org-table of the results to the `kill-ring' 
-  'insert - insert an org-table of the results at point
-  any other string - save results to the file path specified in EXPORT using CONVFN
-                     to convert the results. By default the file name extension will be 
-                     used to choose the correct conversion function (one of `orgtbl-to-tsv' 
-                     `orgtbl-to-csv' `orgtbl-to-latex' `orgtbl-to-html' `orgtbl-to-generic' 
-                     `orgtbl-to-texinfo' `orgtbl-to-orgtbl', or `orgtbl-to-unicode'). 
-                     You can also use the PARAMS arg to specify parameters to pass to the 
-                     PARAMS arg of the conversion function (see `orgtbl-to-generic').
-
-If KVPAIRS is non-nil then the results will be interpreted as lists of key-value
-pairs and converted using `key-values-to-lists'."
+All other arguments are the same as for `extract-text-from-buffers'."
   (interactive (let* ((files (if (eq major-mode 'dired-mode)
 				 (save-excursion
 				   (dired-map-over-marks (dired-get-filename) current-prefix-arg))
 			       (ido-read-file-name "Enter wildcard expression matching filenames:\n")))
 		      (prog (extract-text-choose-prog))
-		      (kvpairs (y-or-n-p "Treat results as key-value pairs?"))
+		      (spec (car prog))
+		      (postproc (second prog))
 		      (export (let ((response (ido-completing-read
 					       "Export: "
 					       '("none" "to kill ring" "insert at point" "to file (prompt)"))))
@@ -726,7 +729,7 @@ pairs and converted using `key-values-to-lists'."
 				   nil t (symbol-name (org-table-get-convfn export)))))
 		      (params (if (and (stringp export) (y-or-n-p "Extra export parameters?"))
 				  (read (concat "'(" (read-string "Parameters: ") ")")))))
-		 (list files prog kvpairs export (intern-soft convfn) params)))
+		 (list files spec postproc export (intern-soft convfn) params)))
   (let* ((files (cond ((stringp files) (file-expand-wildcards files))
 		      ((listp files) files)
 		      (t (error "Invalid argument for files"))))
@@ -739,7 +742,7 @@ pairs and converted using `key-values-to-lists'."
 						   (prog1 (funcall extractfn)
 						     (set-buffer-modified-p nil)))
 					    (unless bufexists (kill-buffer buf)))))
-	 (results2 (if kvpairs (key-values-to-lists results) results)))
+	 (results2 (if postproc (funcall postproc results) results)))
     (cond ((eq export 'kill)
 	   (kill-new (org-table-lisp-to-string results2)))
 	  ((eq export 'insert)
@@ -793,7 +796,7 @@ If optional arg INSERT is non-nil then insert and align the table at point."
 
 ;;;###autoload
 (cl-defun key-values-to-lists (lst &optional missing)
-  "Convert key-value lists LST into a key list and lists of values.
+  "Convert key-value lists LST into a key list and values lists.
 LST should be a list of lists, each of which contains lists of key-value pairs,
 e.g: '(((\"val1\" 1.2) (\"val2\" 1.9) (\"val3\" 3.1))
        ((\"val2\" 2.4) (\"val1\" 2.1))
@@ -813,6 +816,11 @@ This can be used to convert lists of key-value pairs into a csv file, or org-tab
 	  (cl-loop for sublst in lst
 		   collect (cl-loop for key in headers
 				    collect (or (cadr (assoc-string key sublst)) missing))))))
+
+;;;###autoload
+(defun -flatten-1 (L)
+  "Apply `-flatten-n' function to L with NUM argument set to 1."
+  (-flatten-n 1 L))
 
 (provide 'extract-text)
 
