@@ -630,7 +630,8 @@ The return value is a list containing:
 See `extract-text-from-buffers' for more details."
   (let* ((export (let ((response (ido-completing-read
 				  "Export: "
-				  '("none" "to variable" "to kill ring" "insert at point" "write/append to file (prompt)"))))
+				  '("none" "to variable" "to kill ring" "insert at point"
+				    "write/append to file" "append to buffer"))))
 		   (cond ((equal response "none") nil)
 			 ((equal response "to variable")
 			  (let ((continue t) var)
@@ -643,17 +644,19 @@ See `extract-text-from-buffers' for more details."
 			    var))
 			 ((equal response "to kill ring") 'kill)
 			 ((equal response "insert at point") 'insert)
-			 ((equal response "write/append to file (prompt)")
+			 ((equal response "write/append to file")
 			  (cons (read-file-name "Filename: ")
-				(y-or-n-p "Append? "))))))
-	 (convfn (if (stringp export)
+				(y-or-n-p "Append? ")))
+			 ((equal response "append to buffer")
+			  (ido-read-buffer "Buffer: ")))))
+	 (convfn (if (consp export)
 		     (ido-completing-read "Conversion function: "
 					  '("orgtbl-to-tsv" "orgtbl-to-csv" "orgtbl-to-latex"
 					    "orgtbl-to-html" "orgtbl-to-generic"
 					    "orgtbl-to-texinfo" "orgtbl-to-orgtbl"
 					    "orgtbl-to-unicode")
 					  nil t (symbol-name (org-table-get-convfn export)))))
-	 (params (if (and (stringp export) (y-or-n-p "Extra export parameters? "))
+	 (params (if (and (consp export) (y-or-n-p "Extra export parameters? "))
 		     (read (concat "'(" (read-string "Parameters: ") ")")))))
     (list export (intern-soft convfn) params)))
 
@@ -683,7 +686,7 @@ In all cases the function will return the results after processing with POSTPROC
 	   (kill-new (org-table-lisp-to-string results2)))
 	  ((eq export 'insert)
 	   (if (eq major-mode 'bs-mode) (bs-kill))
-	   (insert (org-table-lisp-to-string results2)))
+	   (save-excursion (insert (org-table-lisp-to-string results2))))
 	  ((symbolp export)
 	   (set export results2))
 	  ((consp export)
@@ -696,6 +699,11 @@ In all cases the function will return the results after processing with POSTPROC
 		   (write-file filename t)
 		 (insert "\n")
 		 (append-to-file (point-min) (point-max) filename)))))
+	  ((stringp export)
+	   (with-current-buffer export
+	     (save-excursion
+	       (goto-char (point-max))
+	       (insert (org-table-lisp-to-string results2)))))
 	  (t nil))
     results2))
 
