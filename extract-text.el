@@ -708,7 +708,8 @@ Arguments SPEC, POSTPROC, EXPORT, CONVFN & PARAMS are the same as for `extract-t
     (extract-keyword-bindings 'spec nil :TL :BR :COLS)
     (setq spec (nconc spec (list :TL (region-beginning) :BR (region-end)
 				 :COLS (not current-prefix-arg)))))
-  (extract-text-from-buffers (list (current-buffer)) spec postproc export convfn params))
+  (extract-text-process-results (funcall (extract-text-compile-prog spec))
+				postproc export convfn params))
 
 ;;;###autoload
 (defun extract-text-from-buffers (buffers spec &optional postproc export convfn params)
