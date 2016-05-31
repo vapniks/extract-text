@@ -630,7 +630,7 @@ The return value is a list containing:
 See `extract-text-from-buffers' for more details."
   (let* ((export (let ((response (ido-completing-read
 				  "Export: "
-				  '("none" "to variable" "to kill ring" "insert at point" "to file (prompt)"))))
+				  '("none" "to variable" "to kill ring" "insert at point" "write/append to file (prompt)"))))
 		   (cond ((equal response "none") nil)
 			 ((equal response "to variable")
 			  (let ((continue t) var)
@@ -643,8 +643,9 @@ See `extract-text-from-buffers' for more details."
 			    var))
 			 ((equal response "to kill ring") 'kill)
 			 ((equal response "insert at point") 'insert)
-			 ((equal response "to file (prompt)")
-			  (read-file-name "Filename: ")))))
+			 ((equal response "write/append to file (prompt)")
+			  (cons (read-file-name "Filename: ")
+				(y-or-n-p "Append? "))))))
 	 (convfn (if (stringp export)
 		     (ido-completing-read "Conversion function: "
 					  '("orgtbl-to-tsv" "orgtbl-to-csv" "orgtbl-to-latex"
@@ -685,11 +686,16 @@ In all cases the function will return the results after processing with POSTPROC
 	   (insert (org-table-lisp-to-string results2)))
 	  ((symbolp export)
 	   (set export results2))
-	  ((stringp export)
-	   (let ((convfn (or convfn (org-table-get-convfn export))))
+	  ((consp export)
+	   (let* ((filename (car export))
+		  (appendp (cdr export))
+		  (convfn (or convfn (org-table-get-convfn filename))))
 	     (with-temp-buffer
 	       (insert (funcall convfn results2 params))
-	       (write-file export))))
+	       (if (not appendp)
+		   (write-file filename t)
+		 (insert "\n")
+		 (append-to-file (point-min) (point-max) filename)))))
 	  (t nil))
     results2))
 
