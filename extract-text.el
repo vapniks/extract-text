@@ -615,31 +615,47 @@ Explanation: extract the first 5 numbers from the current buffer. If there are f
 	 (save-excursion (goto-char (point-min)) (recurse ,args2))))))
 
 ;;;###autoload
-(defun extract-text-from-current-buffer (spec &optional postproc export convfn params)
-  "Extract text from the current buffer.
+(defun extract-text-choose-export-args nil
+  "Prompt the user for an export method for `export-text' related commands.
+The return value is a list containing:
+ 1) A symbol or filename indicating the export method
+ 2) An org-table conversion function (e.g. `orgtbl-to-csv'), or nil
+ 3) A list of extra parameters for the conversion function, or nil
+See `extract-text-from-buffers' for more details."
+  (let* ((export (let ((response (ido-completing-read
+				  "Export: "
+				  '("none" "to kill ring" "insert at point" "to file (prompt)"))))
+		   (cond ((equal response "none") nil)
+			 ((equal response "to kill ring") 'kill)
+			 ((equal response "insert at point") 'insert)
+			 ((equal response "to file (prompt)")
+			  (read-file-name "Filename: ")))))
+	 (convfn (if (stringp export)
+		     (ido-completing-read "Conversion function: "
+					  '("orgtbl-to-tsv" "orgtbl-to-csv" "orgtbl-to-latex"
+					    "orgtbl-to-html" "orgtbl-to-generic"
+					    "orgtbl-to-texinfo" "orgtbl-to-orgtbl"
+					    "orgtbl-to-unicode")
+					  nil t (symbol-name (org-table-get-convfn export)))))
+	 (params (if (and (stringp export) (y-or-n-p "Extra export parameters? "))
+		     (read (concat "'(" (read-string "Parameters: ") ")")))))
+    (list export (intern-soft convfn) params)))
 
+;;;###autoload
+(defun extract-text-from-current-buffer (spec &optional postproc export convfn params)
+  "Extract text from the current buffer, or active region.
+
+If region is active, restrict extraction to that region.
 Arguments SPEC, POSTPROC, EXPORT, CONVFN & PARAMS are the same as for `extract-text-from-buffers'."
   (interactive (let* ((prog (extract-text-choose-prog))
 		      (spec (car prog))
 		      (postproc (second prog))
-		      (export (let ((response (ido-completing-read
-					       "Export: "
-					       '("none" "to kill ring" "insert at point" "to file (prompt)"))))
-				(cond ((equal response "none") nil)
-				      ((equal response "to kill ring") 'kill)
-				      ((equal response "insert at point") 'insert)
-				      ((equal response "to file (prompt)")
-				       (read-file-name "Filename: ")))))
-		      (convfn (if (stringp export)
-				  (ido-completing-read "Conversion function: "
-						       '("orgtbl-to-tsv" "orgtbl-to-csv" "orgtbl-to-latex"
-							 "orgtbl-to-html" "orgtbl-to-generic"
-							 "orgtbl-to-texinfo" "orgtbl-to-orgtbl"
-							 "orgtbl-to-unicode")
-						       nil t (symbol-name (org-table-get-convfn export)))))
-		      (params (if (and (stringp export) (y-or-n-p "Extra export parameters?"))
-				  (read (concat "'(" (read-string "Parameters: ") ")")))))
-		 (list spec postproc export (intern-soft convfn) params)))
+		      (exportargs (extract-text-choose-export-args)))
+		 (list spec postproc (car exportargs) (second exportargs) (third exportargs))))
+  (unless (not (region-active-p))
+    (extract-keyword-bindings 'spec nil :TL :BR :COLS)
+    (setq spec (nconc spec (list :TL (region-beginning) :BR (region-end)
+				 :COLS (not current-prefix-arg)))))
   (extract-text-from-buffers (list (current-buffer)) spec postproc export convfn params))
 
 ;;;###autoload
@@ -677,24 +693,8 @@ The optional EXPORT arg determines other actions to perform with the results:
 		      (prog (extract-text-choose-prog))
 		      (spec (car prog))
 		      (postproc (second prog))
-		      (export (let ((response (ido-completing-read
-					       "Export: "
-					       '("none" "to kill ring" "insert at point" "to file (prompt)"))))
-				(cond ((equal response "none") nil)
-				      ((equal response "to kill ring") 'kill)
-				      ((equal response "insert at point") 'insert)
-				      ((equal response "to file (prompt)")
-				       (read-file-name "Filename: ")))))
-		      (convfn (if (stringp export)
-				  (ido-completing-read "Conversion function: "
-						       '("orgtbl-to-tsv" "orgtbl-to-csv" "orgtbl-to-latex"
-							 "orgtbl-to-html" "orgtbl-to-generic"
-							 "orgtbl-to-texinfo" "orgtbl-to-orgtbl"
-							 "orgtbl-to-unicode")
-						       nil t (symbol-name (org-table-get-convfn export)))))
-		      (params (if (and (stringp export) (y-or-n-p "Extra export parameters?"))
-				  (read (concat "'(" (read-string "Parameters: ") ")")))))
-		 (list buffers spec postproc export (intern-soft convfn) params)))
+		      (exportargs (extract-text-choose-export-args)))
+		 (list buffers spec postproc (car exportargs) (second exportargs) (third exportargs))))
   (let* ((buffers (if (stringp buffers)
 		      (cl-loop for buf in (buffer-list)
 			       for name = (buffer-name buf)
@@ -728,7 +728,7 @@ SPEC is a quoted list containing the extraction specification for `extract-text'
 When called interactively an item of `extract-text-user-progs' will be prompted for.
 FILES can be either a list of filepaths or a wildcard pattern matching 
 several filepaths (see `file-expand-wildcards'). When called interactively in `dired-mode'
-any marked files, or the file at point will be used for FILES, otherwise a wildcard
+then `dired-map-over-marks' will be used to select which FILES to use, otherwise a wildcard
 pattern will be prompted for. The current file name is scoped into the `name' variable 
 during processing of SPEC so you can make use of it in the results.
 
@@ -740,25 +740,8 @@ All other arguments are the same as for `extract-text-from-buffers'."
 		      (prog (extract-text-choose-prog))
 		      (spec (car prog))
 		      (postproc (second prog))
-		      (export (let ((response (ido-completing-read
-					       "Export: "
-					       '("none" "to kill ring" "insert at point" "to file (prompt)"))))
-				(cond ((equal response "none") nil)
-				      ((equal response "to kill ring") 'kill)
-				      ((equal response "insert at point") 'insert)
-				      ((equal response "to file (prompt)")
-				       (read-file-name "Filename: ")))))
-		      (convfn (if (stringp export)
-				  (ido-completing-read
-				   "Conversion function: "
-				   '("orgtbl-to-tsv" "orgtbl-to-csv" "orgtbl-to-latex"
-				     "orgtbl-to-html" "orgtbl-to-generic"
-				     "orgtbl-to-texinfo" "orgtbl-to-orgtbl"
-				     "orgtbl-to-unicode")
-				   nil t (symbol-name (org-table-get-convfn export)))))
-		      (params (if (and (stringp export) (y-or-n-p "Extra export parameters?"))
-				  (read (concat "'(" (read-string "Parameters: ") ")")))))
-		 (list files spec postproc export (intern-soft convfn) params)))
+		      (exportargs (extract-text-choose-export-args)))
+		 (list buffers spec postproc (car exportargs) (second exportargs) (third exportargs))))
   (let* ((files (cond ((stringp files) (file-expand-wildcards files))
 		      ((listp files) files)
 		      (t (error "Invalid argument for files"))))
