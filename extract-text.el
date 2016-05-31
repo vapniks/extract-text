@@ -57,6 +57,7 @@
 ;;
 ;; `extract-text-from-files' : Extract text from FILES, and save to file or `kill-ring', or insert as org-table.
 ;; `extract-text-from-buffers' : Extract text from BUFFERS and save to file or `kill-ring', or insert as org-table.
+;; `extract-text-from-current-buffer' : Extract text from the current buffer, or active region.
 ;;
 ;;; Functions:
 ;;
