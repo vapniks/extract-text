@@ -667,7 +667,7 @@ See `extract-text-from-buffers' for more details."
 
 POSTPROC can be a function of one argument to apply to RESULTS to get it in a more suitable
 form for exporting to an org-table or file, (e.g. `-flatten-1' or `key-values-to-lists').
-Otherwise if POSTPROC is nil, nothing will be done.
+Otherwise if POSTPROC is nil, no extra processing will be done.
 
 The EXPORT arg determines actions to perform with the results after processing with POSTPROC:
   nil (default) - do nothing (apart from returning results)
