@@ -688,7 +688,7 @@ In all cases the function will return the results after processing with POSTPROC
 	  ((eq export 'insert)
 	   (if (eq major-mode 'bs-mode) (bs-kill))
 	   (save-excursion (insert (org-table-lisp-to-string results2))))
-	  ((symbolp export)
+	  ((and export (symbolp export))
 	   (set export results2))
 	  ((consp export)
 	   (let* ((filename (car export))
