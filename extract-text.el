@@ -622,17 +622,19 @@ Explanation: extract the first 5 numbers from the current buffer. If there are f
 ;; Any changes to one should be matched by corresponding changes in the other.
 
 ;;;###autoload
-(defun extract-text-choose-export-args nil
+(defun extract-text-choose-export-args (&optional exclude)
   "Prompt the user for an export method for `export-text' related commands.
 The return value is a list containing:
  1) A symbol or filename indicating the export method
  2) An org-table conversion function (e.g. `orgtbl-to-csv'), or nil
  3) A list of extra parameters for the conversion function, or nil
-See `extract-text-from-buffers' for more details."
+See `extract-text-from-buffers' for more details.
+Optional argument EXCLUDE can be a list of options to exclude from the prompt."
   (let* ((export (let ((response (ido-completing-read
 				  "Export: "
-				  '("none" "to variable" "to kill ring" "insert at point"
-				    "write/append to file" "append to buffer"))))
+				  (set-difference '("none" "to variable" "to kill ring" "insert at point"
+						    "write/append to file" "append to buffer")
+						  exclude :test 'equal))))
 		   (cond ((equal response "none") nil)
 			 ((equal response "to variable")
 			  (let ((continue t) var)
@@ -646,8 +648,7 @@ See `extract-text-from-buffers' for more details."
 			 ((equal response "to kill ring") 'kill)
 			 ((equal response "insert at point") 'insert)
 			 ((equal response "write/append to file")
-			  (cons (read-file-name "Filename: ")
-				(y-or-n-p "Append? ")))
+			  (cons (read-file-name "Filename: ") (y-or-n-p "Append? ")))
 			 ((equal response "append to buffer")
 			  (ido-read-buffer "Buffer: ")))))
 	 (convfn (if (consp export)
@@ -682,7 +683,8 @@ The EXPORT arg determines actions to perform with the results after processing w
              conversion function (see `orgtbl-to-generic').
 
 In all cases the function will return the results after processing with POSTPROC (if non-nil)."
-  (let ((results2 (if postproc (funcall postproc results) results)))
+  (let* ((results1 (-flatten-1 results))
+	 (results2 (if postproc (funcall postproc results1) results1)))
     (cond ((eq export 'kill)
 	   (kill-new (org-table-lisp-to-string results2)))
 	  ((eq export 'insert)
@@ -708,12 +710,17 @@ In all cases the function will return the results after processing with POSTPROC
 	  (t nil))
     results2))
 
+;; TODO make sure result are in correct form for all export types
 ;;;###autoload
 (defun extract-text-from-current-buffer (spec &optional postproc export convfn params)
   "Extract text from the current buffer, or active region.
 
 If region is active, restrict extraction to that region.
-Arguments SPEC, POSTPROC, EXPORT, CONVFN & PARAMS are the same as for `extract-text-from-buffers'."
+Arguments SPEC, POSTPROC, EXPORT, CONVFN & PARAMS are the same as for `extract-text-from-buffers'.
+
+Note: when target is an org-table the top level extractions appear in the same row as separate columns.
+If you want multiple rows you may need to alter SPEC so that each extraction is wrapped in a list and 
+then set POSTPROC to `-flatten-1'."
   (interactive (let* ((prog (extract-text-choose-prog))
 		      (spec (car prog))
 		      (postproc (second prog))
@@ -724,7 +731,7 @@ Arguments SPEC, POSTPROC, EXPORT, CONVFN & PARAMS are the same as for `extract-t
     (setq spec (nconc spec (list :TL (region-beginning) :BR (region-end)
 				 :COLS (not current-prefix-arg)))))
   (let ((results (funcall (extract-text-compile-prog spec))))
-    (extract-text-process-results (-flatten-1 results) postproc export convfn params)))
+    (extract-text-process-results (list results) postproc export convfn params)))
 
 ;;;###autoload
 (defun extract-text-from-buffers (buffers spec &optional postproc export convfn params)
@@ -773,11 +780,11 @@ See the documentation of that function for further details."
 
 SPEC is a quoted list containing the extraction specification for `extract-text'.
 When called interactively an item of `extract-text-user-progs' will be prompted for.
-FILES can be either a list of filepaths or a wildcard pattern matching 
-several filepaths (see `file-expand-wildcards'). When called interactively in `dired-mode'
-then `dired-map-over-marks' will be used to select which FILES to use, otherwise a wildcard
-pattern will be prompted for. The current file name is scoped into the `name' variable 
-during processing of SPEC so you can make use of it in the results.
+FILES can be either a list of filepaths or a wildcard pattern matching several 
+filepaths (see `file-expand-wildcards'). When called interactively in `dired-mode'
+then `dired-map-over-marks' will be used to select which FILES to use, otherwise a 
+wildcard pattern will be prompted for. The current file name is scoped into the 
+`name' variable during processing of SPEC so you can make use of it in the results.
 
 All other arguments are the same as for `extract-text-from-buffers'."
   (interactive (let* ((files (if (eq major-mode 'dired-mode)
