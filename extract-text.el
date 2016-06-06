@@ -125,7 +125,7 @@ be the string searched."
 	   collect (match-string-no-properties i str)))
 
 ;;;###autoload
-(cl-defun extract-matching-strings (regexp &key count startpos endpos (error t))
+(cl-defun extract-matching-strings (regexp &key count startpos endpos (error t) debug)
   "Extract strings from current buffer that match subexpressions of REGEXP.
 If COUNT is supplied use the COUNT'th match of REGEXP.
 The returned list contains the whole match followed by matches to subexpressions 
@@ -135,15 +135,49 @@ If STARTPOS is supplied searching starts at that buffer position, otherwise it
 starts from the current position. If ENDPOS is supplied then the match must
 occur before that position.
 By default if no match is found then an error is thrown. If ERROR is set to anything
-other than t (including nil) then that value will be returned if there is an error."
+other than t (including nil) then that value will be returned if there is an error.
+
+If DEBUG is non-nil then matches will be highlighted and the user will be prompted
+to continue after each match."
   (if startpos (goto-char startpos))
-  (if (condition-case err
-	  (re-search-forward regexp endpos (not error) count)
-	(error (cond ((eq error t)
-		      (signal (car err) (cdr err)))
-		     (t nil))))
-      (match-strings-no-properties regexp)
-    error))
+  (let (matches)
+    (if (condition-case err
+	    (re-search-forward regexp endpos (not error) count)
+	  (error (cond ((eq error t)
+			(signal (car err) (cdr err)))
+		       (t nil))))
+	(setq matches (match-strings-no-properties regexp))
+      error)
+    (unless (not debug)
+      (let ((strpos1 -1)
+	    (strpos2 0)
+	    (rlen (length regexp))
+	    startpos2 endpos2)
+	(if (> (length matches) 1)
+	    (cl-loop for matchnum from 1 to (1- (length matches))
+		     do (progn
+			  (setq strpos1 (string-match-p "\\\\(" regexp (min (1+ strpos1) rlen))
+				strpos2 (+ 2 (string-match-p "\\\\)" regexp (min strpos2 rlen))))
+			  (extract-text-debug-next
+			   (match-beginning matchnum)
+			   (match-end matchnum)
+			   (extract-text-propertize-string
+			    (concat "Matching regexp: " regexp)
+			    (+ strpos1 17) (+ strpos2 17) 'face isearch-face))))
+	  (extract-text-debug-next (match-beginning 0) (match-end 0) regexp)))
+      (isearch-dehighlight))
+    matches))
+
+(defun extract-text-propertize-string (str start end &rest props)
+  "Apply PROPS to STR between positions START and END."
+  (concat (substring str 0 start)
+	  (apply 'propertize (substring str start end) props)
+	  (substring str end)))
+
+(defun extract-text-debug-next (begin end &optional msg)
+  "Prompt user to step forward through debugging."
+  (isearch-highlight begin end)
+  (read-char (format "%s\nPress any key to continue, or C-g to quit" msg)))
 
 ;;;###autoload
 (cl-defun extract-matching-rectangle (tl br &key (inctl t) (incbr t) rows cols (error t) idxs)
@@ -324,7 +358,9 @@ when the function is called by name --e.g. (wrapper arg1 arg2)--
 as part of `extract-text' (which see).
 
 Each wrapper function should return a string or list of strings,
-and may make use of the functions in `extract-text-builtin-wrappers'."
+and may make use of the functions in `extract-text-builtin-wrappers',
+and also the DEBUG variable which indicates whether `extract-text'
+was called with a non-nil :DEBUG arg."
   :group 'extract-text
   :type  '(repeat (cons (symbol :tag "Name")
                         (cons
@@ -336,7 +372,7 @@ and may make use of the functions in `extract-text-builtin-wrappers'."
   '((regex (regexp &key count startpos endpos (error t))
 	   (let ((txt (extract-matching-strings
 		       regexp :count count :startpos startpos
-		       :endpos endpos :error error))
+		       :endpos endpos :error error :debug DEBUG))
 		 (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
 	     (if (listp txt)
 		 (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)
@@ -472,8 +508,8 @@ the user to apply to the list of arguments for `extract-text' which are returned
 ;;;###autoload
 (defun extract-text-compile-prog (prg)
   "Create compiled version of `extract-text' with arguments PRG applied."
-  (let* ((byte-compile-warnings '(free-vars
-				  unresolved callargs redefine obsolete
+  (let* ((byte-compile-warnings '(unresolved
+				  callargs redefine obsolete
 				  noruntime cl-functions
 				  interactive-only lexical make-local
 				  mapcar constants suspicious)))
@@ -515,6 +551,8 @@ list.
            is thrown, and the return value used in place of the extraction. 
 
 :FLATTEN - specify that returned list should be flattened to this depth with `-flatten-n' function 
+:DEBUG   - if non-nil, step through extractions one by one, highlighting them and prompting the user to continue.
+           This is useful when checking your extraction program.
 
 The following keyword args are passed to `extract-matching-rectangle' (which see) to restrict the
 text to a rectangle in the current buffer before performing extractions: 
@@ -559,7 +597,7 @@ Explanation: extract the first 5 numbers from the current buffer. If there are f
 			  args3
 			(let ((args4 args3)) ;need this let form so we can use a symbol 'args4 to access the input
 			  `(let ,(extract-keyword-bindings
-				  'args4 t :REPS :ERROR :TL :BR (:INCTL t) (:INCBR t) :ROWS :COLS :FLATTEN)
+				  'args4 t :REPS :ERROR :TL :BR (:INCTL t) (:INCBR t) :ROWS :COLS :FLATTEN :DEBUG)
 			     ;; set defaults and get buffer containing text
 			     (let* ((REPS (or REPS 1))
 				    (FLATTEN (or FLATTEN 0))
