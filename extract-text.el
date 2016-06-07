@@ -306,11 +306,12 @@ If optional arg CURRENTONLY is non-nil, only remove `extract-text-overlays'."
       (setq extract-text-old-overlays
 	    (cdr extract-text-old-overlays)))))
 
-(defun extract-text-debug-next (regions &optional msg)
+(defun extract-text-debug-next (regions &optional msg msgregions)
   "Prompt user to step forward through debugging.
 REGIONS should be a list of cons cells each of which contains a pair (start . end)
 of positions delimiting regions to be highlighted.
-Optional MSG is a string to prepend to the user prompt."
+Optional MSG is a string to prepend to the user prompt, and MSGREGIONS is an optional
+list of cons cells indicating regions of MSG that should be highlighted"
   (while extract-text-overlays
     (let* ((ov (car extract-text-overlays))
 	   (ovstart (overlay-start ov))
@@ -330,6 +331,9 @@ Optional MSG is a string to prepend to the user prompt."
 		(setq extract-text-overlays
 		      (cons ov2 extract-text-overlays))))
   (let ((inhibit-quit t))
+    (cl-loop for (beg . end) in msgregions
+	     do (setq msg (extract-text-propertize-string
+			   msg beg end 'face isearch-face)))
     (when (eq (read-char (format "%s\nPress any key to continue, or C-g to quit" msg))
 	      7)
       (extract-text-dehighlight)
@@ -397,12 +401,11 @@ to continue after each match."
 			  (extract-text-debug-next
 			   (list (cons (match-beginning matchnum)
 				       (match-end matchnum)))
-			   (extract-text-propertize-string
-			    (concat "Matching regexp: " regexp)
-			    (+ strpos1 17) (+ strpos2 17) 'face isearch-face))))
+			   (concat "Matching regexp: " regexp)
+			   (list (cons (+ strpos1 17) (+ strpos2 17))))))
 	  (extract-text-debug-next
 	   (list (cons (match-beginning 0) (match-end 0)))
-	   regexp))))
+	   (concat "Matching regexp: " regexp) (list (cons 17 (+ (length regexp) 17)))))))
     matches))
 
 ;; TODO: add debug code
