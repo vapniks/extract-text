@@ -275,11 +275,11 @@ one of these programs and its arguments (in the case of interactive functions)."
 						:tag "Command"))
 		       (function :tag "Postprocessing function" :value "identity"))))
 
-(defvar extract-text-debug-overlays nil
-  "List of overlays used during debugging extraction programs.")
+(defvar extract-text-old-overlays nil
+  "List of overlays highlighting previous matches while debugging.")
 
-(defvar extract-text-overlay nil
-  "Overlay of last match.")
+(defvar extract-text-overlays nil
+  "List of overlays highlighting current matches while debugging.")
 
 (defcustom extract-text-reset-debug-highlights nil
   "If non-nil then debug highlighting will be reset on each new repetition."
@@ -294,43 +294,65 @@ one of these programs and its arguments (in the case of interactive functions)."
 
 (defun extract-text-highlight (beg end)
   "Highlight text between BEG and END."
-  (if extract-text-overlay
+  (if extract-text-overlays
       ;; Overlay already exists, just move it.
-      (move-overlay extract-text-overlay beg end (current-buffer))
+      (move-overlay extract-text-overlays beg end (current-buffer))
     ;; Overlay doesn't exist, create it.
-    (setq extract-text-overlay (make-overlay beg end))
+    (setq extract-text-overlays (make-overlay beg end))
     ;; 1001 is higher than lazy's 1000 and ediff's 100+
-    (overlay-put extract-text-overlay 'priority 1001)
-    (overlay-put extract-text-overlay 'face isearch-face)))
+    (overlay-put extract-text-overlays 'priority 1001)
+    (overlay-put extract-text-overlays 'face isearch-face)))
 
 (defun extract-text-dehighlight (&optional currentonly)
   "Remove debug highlighting.
-Removes all overlays in `extract-text-debug-overlays' and `extract-text-overlay'.
-If optional arg CURRENTONLY is non-nil, only remove `extract-text-overlay'."
-  (when extract-text-overlay (delete-overlay extract-text-overlay))
+Removes all overlays in `extract-text-old-overlays' and `extract-text-overlays'.
+If optional arg CURRENTONLY is non-nil, only remove `extract-text-overlays'."
+  (while extract-text-overlays
+    (delete-overlay (car extract-text-overlays))
+    (setq extract-text-overlays
+	  (cdr extract-text-overlays)))
   (unless currentonly
-    (while extract-text-debug-overlays
-      (delete-overlay (car extract-text-debug-overlays))
-      (setq extract-text-debug-overlays
-	    (cdr extract-text-debug-overlays)))))
+    (while extract-text-old-overlays
+      (delete-overlay (car extract-text-old-overlays))
+      (setq extract-text-old-overlays
+	    (cdr extract-text-old-overlays)))))
 
 (defun extract-text-debug-next (begin end &optional msg)
   "Prompt user to step forward through debugging."
-  (if (and extract-text-overlay
-	   (overlay-start extract-text-overlay)
-	   (overlay-end extract-text-overlay))
+  (while extract-text-overlays
+    (let* ((ov (car extract-text-overlays))
+	   (ovstart (overlay-start ov))
+	   (ovend (overlay-end ov)))
+      (when (and ovstart ovend)
+	
+	)
+      )
+    (if (and (overlay-start extract-text-overlays)
+	     (overlay-end extract-text-overlays))
+	(let ((ov (make-overlay
+		   (overlay-start extract-text-overlays)
+		   (overlay-end extract-text-overlays))))
+	  (overlay-put ov 'priority 1000)
+	  (overlay-put ov 'face lazy-highlight-face)
+	  (overlay-put ov 'window (selected-window))
+	  (setq extract-text-old-overlays (cons ov extract-text-old-overlays)))
+      )
+    )
+  (if (and extract-text-overlays
+	   (overlay-start extract-text-overlays)
+	   (overlay-end extract-text-overlays))
       (let ((ov (make-overlay
-		 (overlay-start extract-text-overlay)
-		 (overlay-end extract-text-overlay))))
+		 (overlay-start extract-text-overlays)
+		 (overlay-end extract-text-overlays))))
 	(overlay-put ov 'priority 1000)
 	(overlay-put ov 'face lazy-highlight-face)
 	(overlay-put ov 'window (selected-window))
-	(setq extract-text-debug-overlays (cons ov extract-text-debug-overlays))))
+	(setq extract-text-old-overlays (cons ov extract-text-old-overlays))))
   (extract-text-highlight begin end)
   (let ((inhibit-quit t))
-    (unless (not (eq (read-char
-		      (format "%s\nPress any key to continue, or C-g to quit" msg))
-		     7))
+    (when (eq (read-char
+	       (format "%s\nPress any key to continue, or C-g to quit" msg))
+	      7)
       (extract-text-dehighlight)
       (setq inhibit-quit nil)
       (keyboard-quit))))
@@ -383,7 +405,7 @@ to continue after each match."
 		       (t nil))))
 	(setq matches (match-strings-no-properties regexp))
       error)
-    (unless (not debug)
+    (when debug
       (let ((strpos1 -1)
 	    (strpos2 0)
 	    (rlen (length regexp))
@@ -404,7 +426,7 @@ to continue after each match."
 
 ;; TODO: add debug code
 ;;;###autoload
-(cl-defun extract-matching-rectangle (tl br &key (inctl t) (incbr t) rows cols (error t) idxs)
+(cl-defun extract-matching-rectangle (tl br &key (inctl t) (incbr t) rows cols (error t) idxs debug)
   "Extract a rectangle of text (list of strings) from the current buffer.
 The rectangle can be specified in several different ways:
 
@@ -447,14 +469,17 @@ If no matching rectangle is found then an error is thrown unless :ERROR is set t
 some other value than t (including nil) in which case that value will be returned instead.
 To return a subset of the rows of the extracted rectangle set the :IDXS argument to
 a list of indices of rows to return (0 indicates 1st row), or just a single number
-to return a single row."
+to return a single row.
+
+If DEBUG is non-nil then matches will be highlighted and the user will be prompted
+to continue after each match."
   ;; check we have the required arguments
   (if (not (and (or tl br)
 		(or (and tl br)
 		    (and rows cols))))
       (error "Missing :tl/:br or :cols & :rows arguments"))
   ;; find tl & br positions
-  (cl-flet* ((search (regex matchfun count) ;function to find position by regexp
+  (cl-flet* ((search (regex matchfun count) ;function to find position by regexp. Returns 'nomatch if cant be found
 		     (if (re-search-forward regex nil t count)
 			 (if (match-string 1)
 			     (funcall matchfun 1)
@@ -462,10 +487,10 @@ to return a single row."
 		       (if (eq error t)
 			   (error "Unable to match regex: %s" regex)
 			 'nomatch)))
-	     (getpos (arg matchfn)
-		     (cond
+	     (getpos (arg matchfn)	;function to return buffer position corresponding to TL/BR ARG
+		     (cond		;if ARG is nil then return nil, if position can't be found return 'nomatch
 		      ((integerp arg) arg)
-		      ((and (numberp arg) (<= arg 1) (>= arg 0))
+		      ((and (numberp arg) (>= arg 0) (<= arg 1))
 		       (round (* arg (- (point-max) (point-min)))))
 		      ((stringp arg) (search arg matchfn nil))
 		      ((and (listp arg)
@@ -487,29 +512,42 @@ to return a single row."
 			  (goto-char (if type (point-min) (point-max)))
 			  (move-to-column col t)
 			  (point))))
-	     (adjust3 (pos cols type)
-		      (save-excursion
-			(goto-char pos)
-			(move-to-column
+	     (adjust3 (pos cols type)	;function that returns the position of the other side of the rectangle
+		      (save-excursion	;in the same row as POS, when the rectangle has COLS columns. 
+			(goto-char pos)	;If TYPE is non-nil POS is assumed to be on the left hand side of the rectangle
+			(move-to-column	;otherwise it is assumed to be on the right hand side.
 			 (if type
 			     (+ cols (current-column))
 			   (- (current-column) cols)) t)
-			(point))))
+			(point)))
+	     (rectcoords (tl3 br3)	;function that returns the start and end positions of all substrings that
+			 (let (pairs scol (ecol (save-excursion (goto-char br3) (current-column))))
+			   (goto-char tl3)
+			   (setq scol (current-column)
+				 width (- ecol scol))
+			   (while (< (point) br3)
+			     (sets pairs (cons (cons (point) (+ (point) width)) pairs))
+			     (forward-line 1)
+			     (move-to-column scol t)))
+			 pairs))		;make up the rectangle delimited by tl3 and br3
     (let* ((tl2 (getpos tl (if inctl 'match-beginning 'match-end)))
 	   (br2 (getpos br (if incbr 'match-end 'match-beginning)))
 	   (strs (unless (memq 'nomatch (list tl2 br2))
 		   (cond
 		    ((and tl2 br2 (eq cols t))
-		     (split-string (buffer-substring-no-properties tl2 br2) "\n"))
+		     (prog1 (split-string (buffer-substring-no-properties tl2 br2) "\n")
+		       (if debug (extract-text-debug-next tl2 br2))))
 		    ((and tl2 br2 (eq rows t))
 		     (extract-rectangle (adjust2 tl2 t) (adjust2 br2 nil)))
 		    ((and tl2 br2) (extract-rectangle tl2 br2))
 		    ((and tl2 (numberp rows) (eq cols t))
-		     (split-string (buffer-substring-no-properties
-				    tl2 (adjust1 tl2 nil rows 1)) "\n"))
+		     (prog1 (split-string (buffer-substring-no-properties
+					   tl2 (adjust1 tl2 nil rows 1)) "\n")
+		       (if debug (extract-text-debug-next tl2 (adjust1 tl2 nil rows 1)))))
 		    ((and br2 (numberp rows) (eq cols t))
-		     (split-string (buffer-substring-no-properties
-				    (adjust1 br2 t rows 1) br2) "\n"))
+		     (prog1 (split-string (buffer-substring-no-properties
+					   (adjust1 br2 t rows 1) br2) "\n")
+		       (if debug (extract-text-debug-next (adjust1 br2 t rows 1) br2))))
 		    ((and tl2 (numberp cols) (eq rows t))
 		     (extract-rectangle (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil)))
 		    ((and br2 (numberp cols) (eq rows t))
@@ -690,14 +728,14 @@ Explanation: extract the first 5 numbers from the current buffer. If there are f
 					      (error (case ERROR
 						       (skipall (setq results nil))
 						       (stopall (cl-return-from 'overreps))
-						       (stop (unless (null results)
+						       (stop (when results
 							       (setq allresults
 								     (cons (-flatten-1 (reverse results))
 									   allresults)))
 							     (cl-return-from 'overreps))
 						       (t (if (or TL BR) (kill-buffer buf2))
 							  (signal (car err2) (cdr err2))))))
-					    (unless (null results)
+					    (when results
 					      (setq allresults
 						    (cons (-flatten-1 (reverse results)) allresults))))))
 			       (if (or TL BR) (kill-buffer buf2))
@@ -817,7 +855,7 @@ then set POSTPROC to `-flatten-1'."
 		      (postproc (second prog))
 		      (exportargs (extract-text-choose-export-args)))
 		 (list spec postproc (car exportargs) (second exportargs) (third exportargs))))
-  (unless (not (region-active-p))
+  (when (region-active-p)
     (extract-keyword-bindings 'spec nil :TL :BR :COLS)
     (setq spec (nconc spec (list :TL (region-beginning) :BR (region-end)
 				 :COLS (not current-prefix-arg)))))
