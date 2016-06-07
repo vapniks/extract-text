@@ -251,6 +251,30 @@ Examples:
    explanation: extract a date in the form DD/MM/YYYY and convert to an org-timestamp
                 (you may want to add something like this to `extract-text-user-wrappers')")
 
+;;;###autoload
+(defcustom extract-text-user-progs nil
+  "Lists of arguments to use with `extract-text'.
+This list can be used to store useful extraction programs that you might want to reuse.
+Each element is a list of three items:
+ 1) A name or short description of the extraction.
+ 2) A list of arguments for `extract-text', or an interactive function which returns 
+    such a list. 
+ 3) An optional postprocessing function to rearrange the list of results returned by
+    `extract-text-from-buffers' and `extract-text-from-files' before they are exported
+    to an org-table or file (e.g. concatenate the results with `-flatten-1' or extract
+    column headers with `key-values-to-lists', or add a row of headers). 
+    The function should take the list of results to be processed as its only argument, 
+    and return the rearranged list.
+
+The function `extract-text-choose-prog' can be used to prompt the user for
+one of these programs and its arguments (in the case of interactive functions)."
+  :group 'extract-text
+  :type '(repeat (list (string :tag "Name or short description")
+		       (choice (sexp :tag "List of arguments" :value (nil :REPS 1))
+			       (restricted-sexp :match-alternatives (commandp)
+						:tag "Command"))
+		       (function :tag "Postprocessing function" :value "identity"))))
+
 (defvar extract-text-debug-overlays nil
   "List of overlays used during debugging extraction programs.")
 
@@ -512,30 +536,6 @@ found an error will be thrown."
       (insert (mapconcat 'identity rect "\n"))
       (goto-char (point-min)))
     buf))
-
-;;;###autoload
-(defcustom extract-text-user-progs nil
-  "Lists of arguments to use with `extract-text'.
-This list can be used to store useful extraction programs that you might want to reuse.
-Each element is a list of three items:
- 1) A name or short description of the extraction.
- 2) A list of arguments for `extract-text', or an interactive function which returns 
-    such a list. 
- 3) An optional postprocessing function to rearrange the list of results returned by
-    `extract-text-from-buffers' and `extract-text-from-files' before they are exported
-    to an org-table or file (e.g. concatenate the results with `-flatten-1' or extract
-    column headers with `key-values-to-lists', or add a row of headers). 
-    The function should take the list of results to be processed as its only argument, 
-    and return the rearranged list.
-
-The function `extract-text-choose-prog' can be used to prompt the user for
-one of these programs and its arguments (in the case of interactive functions)."
-  :group 'extract-text
-  :type '(repeat (list (string :tag "Name or short description")
-		       (choice (sexp :tag "List of arguments" :value (nil :REPS 1))
-			       (restricted-sexp :match-alternatives (commandp)
-						:tag "Command"))
-		       (function :tag "Postprocessing function" :value "identity"))))
 
 ;;;###autoload
 (cl-defun extract-text-choose-prog (&optional (progs extract-text-user-progs))
