@@ -292,17 +292,6 @@ one of these programs and its arguments (in the case of interactive functions)."
 	  (apply 'propertize (substring str start end) props)
 	  (substring str end)))
 
-(defun extract-text-highlight (beg end)
-  "Highlight text between BEG and END."
-  (if extract-text-overlays
-      ;; Overlay already exists, just move it.
-      (move-overlay extract-text-overlays beg end (current-buffer))
-    ;; Overlay doesn't exist, create it.
-    (setq extract-text-overlays (make-overlay beg end))
-    ;; 1001 is higher than lazy's 1000 and ediff's 100+
-    (overlay-put extract-text-overlays 'priority 1001)
-    (overlay-put extract-text-overlays 'face isearch-face)))
-
 (defun extract-text-dehighlight (&optional currentonly)
   "Remove debug highlighting.
 Removes all overlays in `extract-text-old-overlays' and `extract-text-overlays'.
@@ -317,41 +306,31 @@ If optional arg CURRENTONLY is non-nil, only remove `extract-text-overlays'."
       (setq extract-text-old-overlays
 	    (cdr extract-text-old-overlays)))))
 
-(defun extract-text-debug-next (begin end &optional msg)
-  "Prompt user to step forward through debugging."
+(defun extract-text-debug-next (regions &optional msg)
+  "Prompt user to step forward through debugging.
+REGIONS should be a list of cons cells each of which contains a pair (start . end)
+of positions delimiting regions to be highlighted.
+Optional MSG is a string to prepend to the user prompt."
   (while extract-text-overlays
     (let* ((ov (car extract-text-overlays))
 	   (ovstart (overlay-start ov))
 	   (ovend (overlay-end ov)))
       (when (and ovstart ovend)
-	
-	)
-      )
-    (if (and (overlay-start extract-text-overlays)
-	     (overlay-end extract-text-overlays))
-	(let ((ov (make-overlay
-		   (overlay-start extract-text-overlays)
-		   (overlay-end extract-text-overlays))))
-	  (overlay-put ov 'priority 1000)
-	  (overlay-put ov 'face lazy-highlight-face)
-	  (overlay-put ov 'window (selected-window))
-	  (setq extract-text-old-overlays (cons ov extract-text-old-overlays)))
-      )
-    )
-  (if (and extract-text-overlays
-	   (overlay-start extract-text-overlays)
-	   (overlay-end extract-text-overlays))
-      (let ((ov (make-overlay
-		 (overlay-start extract-text-overlays)
-		 (overlay-end extract-text-overlays))))
-	(overlay-put ov 'priority 1000)
-	(overlay-put ov 'face lazy-highlight-face)
-	(overlay-put ov 'window (selected-window))
-	(setq extract-text-old-overlays (cons ov extract-text-old-overlays))))
-  (extract-text-highlight begin end)
+	(let ((ov2 (make-overlay ovstart ovend)))
+	  (overlay-put ov2 'priority 1000)
+	  (overlay-put ov2 'face lazy-highlight-face)
+	  (overlay-put ov2 'window (selected-window))
+	  (setq extract-text-old-overlays (cons ov2 extract-text-old-overlays))))
+      (delete-overlay ov)
+      (setq extract-text-overlays (cdr extract-text-overlays))))
+  (cl-loop for (beg . end) in regions
+	   do (let ((ov2 (make-overlay beg end)))
+		(overlay-put ov2 'priority 1001)
+		(overlay-put ov2 'face isearch-face)
+		(setq extract-text-overlays
+		      (cons ov2 extract-text-overlays))))
   (let ((inhibit-quit t))
-    (when (eq (read-char
-	       (format "%s\nPress any key to continue, or C-g to quit" msg))
+    (when (eq (read-char (format "%s\nPress any key to continue, or C-g to quit" msg))
 	      7)
       (extract-text-dehighlight)
       (setq inhibit-quit nil)
@@ -416,12 +395,14 @@ to continue after each match."
 			  (setq strpos1 (string-match-p "\\\\(" regexp (min (1+ strpos1) rlen))
 				strpos2 (+ 2 (string-match-p "\\\\)" regexp (min strpos2 rlen))))
 			  (extract-text-debug-next
-			   (match-beginning matchnum)
-			   (match-end matchnum)
+			   (list (cons (match-beginning matchnum)
+				       (match-end matchnum)))
 			   (extract-text-propertize-string
 			    (concat "Matching regexp: " regexp)
 			    (+ strpos1 17) (+ strpos2 17) 'face isearch-face))))
-	  (extract-text-debug-next (match-beginning 0) (match-end 0) regexp))))
+	  (extract-text-debug-next
+	   (list (cons (match-beginning 0) (match-end 0)))
+	   regexp))))
     matches))
 
 ;; TODO: add debug code
@@ -536,18 +517,18 @@ to continue after each match."
 		   (cond
 		    ((and tl2 br2 (eq cols t))
 		     (prog1 (split-string (buffer-substring-no-properties tl2 br2) "\n")
-		       (if debug (extract-text-debug-next tl2 br2))))
+		       (if debug (extract-text-debug-next (list (cons tl2 br2))))))
 		    ((and tl2 br2 (eq rows t))
 		     (extract-rectangle (adjust2 tl2 t) (adjust2 br2 nil)))
 		    ((and tl2 br2) (extract-rectangle tl2 br2))
 		    ((and tl2 (numberp rows) (eq cols t))
 		     (prog1 (split-string (buffer-substring-no-properties
 					   tl2 (adjust1 tl2 nil rows 1)) "\n")
-		       (if debug (extract-text-debug-next tl2 (adjust1 tl2 nil rows 1)))))
+		       (if debug (extract-text-debug-next (list (cons tl2 (adjust1 tl2 nil rows 1)))))))
 		    ((and br2 (numberp rows) (eq cols t))
 		     (prog1 (split-string (buffer-substring-no-properties
 					   (adjust1 br2 t rows 1) br2) "\n")
-		       (if debug (extract-text-debug-next (adjust1 br2 t rows 1) br2))))
+		       (if debug (extract-text-debug-next (list (cons (adjust1 br2 t rows 1) br2))))))
 		    ((and tl2 (numberp cols) (eq rows t))
 		     (extract-rectangle (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil)))
 		    ((and br2 (numberp cols) (eq rows t))
