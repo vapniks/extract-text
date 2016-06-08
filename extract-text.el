@@ -130,6 +130,7 @@ was called with a non-nil :DEBUG arg."
 			 (restricted-sexp :match-alternatives (listp) :tag "Arglist")
 			 (repeat (sexp :tag "Expression"))))))
 
+;; TODO: DEBUG for move function (also fix debug for `extract-matching-rectangle')
 ;;;###autoload
 (defvar extract-text-builtin-wrappers
   '((regex (regexp &key count startpos endpos (error t))
@@ -407,7 +408,6 @@ to continue after each match."
 	   (concat "Matching regexp: " regexp) (list (cons 17 (+ (length regexp) 17)))))))
     matches))
 
-;; TODO: add debug code
 ;;;###autoload
 (cl-defun extract-matching-rectangle (tl br &key (inctl t) (incbr t) rows cols (error t) idxs debug)
   "Extract a rectangle of text (list of strings) from the current buffer.
@@ -503,6 +503,10 @@ to continue after each match."
 			     (+ cols (current-column))
 			   (- (current-column) cols)) t)
 			(point)))
+	     (filter (lst)		;filter a list according to indices in idxs
+		     (cond ((numberp idxs) (-select-by-indices (list idxs) lst))
+			   ((and idxs (listp idxs)) (-select-by-indices idxs lst))
+			   (t lst)))
 	     (rectcoords (tl3 br3)	;function that returns the start and end positions of all substrings that
 			 (let (pairs scol (ecol (save-excursion (goto-char br3) (current-column))))
 			   (goto-char tl3)
@@ -512,7 +516,7 @@ to continue after each match."
 			     (setq pairs (cons (cons (point) (+ (point) width)) pairs))
 			     (forward-line 1)
 			     (move-to-column scol t))
-			   pairs))) ;make up the rectangle delimited by tl3 and br3
+			   (filter (reverse pairs)))))
     (let* ((tl2 (getpos tl (if inctl 'match-beginning 'match-end)))
 	   (br2 (getpos br (if incbr 'match-end 'match-beginning)))
 	   (msg (format "Rectangle: TL=%s, BR=%s, INCTL=%s, INCBR=%s, ROWS=%s, COLS=%s, IDXS=%s"
@@ -549,10 +553,7 @@ to continue after each match."
 		       (if debug (extract-text-debug-next (rectcoords (or tl2 (adjust1 br2 t rows cols))
 								      (or br2 (adjust1 tl2 nil rows cols)))
 							  msg))))))))
-      (cond ((memq 'nomatch (list tl2 br2)) error)
-	    ((numberp idxs) (-select-by-indices (list idxs) strs))
-	    ((and (not (null idxs)) (listp idxs)) (-select-by-indices idxs strs))
-	    (t strs)))))
+      (if (memq 'nomatch (list tl2 br2)) error (filter strs)))))
 
 ;;;###autoload
 (cl-defun copy-rectangle-to-buffer (tl br &key (inctl t) (incbr t) rows cols)
