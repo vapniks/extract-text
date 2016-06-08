@@ -146,32 +146,53 @@ was called with a non-nil :DEBUG arg."
 				      :cols cols :error error :idxs idxs :debug DEBUG))
     (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline bwdline
 		 fwdword bwdword fwdmark bwdmark pos col row rowend colend)
-	  (loop-over-keyword-args
-	   all (case key
-		 (:fwdregex (if (listp value) (apply 're-search-forward value)
-			      (re-search-forward value)))
-		 (:bwdregex (if (listp value) (apply 're-search-backward value)
-			      (re-search-backward value)))
-		 (:fwdchar (forward-char value))
-		 (:bwdchar (backward-char value))
-		 (:fwdline (forward-line value))
-		 (:bwdline (forward-line (- value)))
-		 (:fwdword (right-word value))
-		 (:bwdword (left-word value))
-		 (:fwdmark (if (last positions value) ;assumes `positions' list is in scope
-			       (goto-char (car (last positions value)))))
-		 (:bwdmark (if (nth value positions) ;assumes `positions' list is in scope
-			       (goto-char (nth value positions))))
-		 (:pos (goto-char value))
-		 (:col (move-to-column value t))
-		 (:row (let ((col (current-column)))
-			 (goto-char (point-min))
-			 (forward-line (1- value))
-			 (move-to-column col t)))
-		 (:rowend (end-of-line))
-		 (:colend (let ((col (current-column)))
-			    (goto-char (point-max))
-			    (move-to-column col t)))))
+	  (cl-flet ((debugit (fmtstr)
+			     (let ((cmdstr (concat "(move " (substring (format "%s" all) 1 -1) ")")))
+			       (save-match-data
+				 (extract-text-debug-next
+				  nil cmdstr (list (cons (string-match (format fmtstr key) cmdstr)
+							 (match-end 0))))))))
+	    (loop-over-keyword-args
+	     all (case key
+		   (:fwdregex (if (listp value) (apply 're-search-forward value)
+				(re-search-forward value))
+			      (if DEBUG (debugit "%s \"[^\"]*\"")))
+		   (:bwdregex (if (listp value) (apply 're-search-backward value)
+				(re-search-backward value))
+			      (if DEBUG (debugit "%s \"[^\"]*\"")))
+		   (:fwdchar (forward-char value)
+			     (if DEBUG (debugit "%s [0-9]*")))
+		   (:bwdchar (backward-char value)
+			     (if DEBUG (debugit "%s [0-9]*")))
+		   (:fwdline (forward-line value)
+			     (if DEBUG (debugit "%s [0-9]*")))
+		   (:bwdline (forward-line (- value))
+			     (if DEBUG (debugit "%s [0-9]*")))
+		   (:fwdword (right-word value)
+			     (if DEBUG (debugit "%s [0-9]*")))
+		   (:bwdword (left-word value)
+			     (if DEBUG (debugit "%s [0-9]*")))
+		   (:fwdmark (if (last positions value) ;assumes `positions' list is in scope
+				 (goto-char (car (last positions value))))
+			     (if DEBUG (debugit "%s [0-9]*")))
+		   (:bwdmark (if (nth value positions) ;assumes `positions' list is in scope
+				 (goto-char (nth value positions)))
+			     (if DEBUG (debugit "%s [0-9]*")))
+		   (:pos (goto-char value)
+			 (if DEBUG (debugit "%s [0-9]*")))
+		   (:col (move-to-column value t)
+			 (if DEBUG (debugit "%s [0-9]*")))
+		   (:row (let ((col (current-column)))
+			   (goto-char (point-min))
+			   (forward-line (1- value))
+			   (move-to-column col t))
+			 (if DEBUG (debugit "%s [0-9]*")))
+		   (:rowend (end-of-line)
+			    (if DEBUG (debugit "%s [0-9]*")))
+		   (:colend (let ((col (current-column)))
+			      (goto-char (point-max))
+			      (move-to-column col t))
+			    (if DEBUG (debugit "%s [0-9]*"))))))
 	  'skip)
     (transform (regexp rep strs &key fixedcase literal subexp start idxs)
 	       (let ((strs (if (stringp strs) (list strs) strs))
@@ -184,71 +205,71 @@ was called with a non-nil :DEBUG arg."
 				   str)) strs))))
   "A list of builtin wrapper functions that can be used with `extract-text':
 
- (regex regexp &key count startpos endpos error)
-This is a wrapper around `extract-matching-strings' (which see).
-Unlike `extract-matching-strings', if regexp contains subexpressions then only matches 
-to those subexpressions will be returned, otherwise the whole match is returned.
-Note: to ensure that a 'nil symbol is returned in the results on error set the error arg to ''nil 
-not 'nil or nil
+  (regex regexp &key count startpos endpos error)
+  This is a wrapper around `extract-matching-strings' (which see).
+  Unlike `extract-matching-strings', if regexp contains subexpressions then only matches 
+  to those subexpressions will be returned, otherwise the whole match is returned.
+  Note: to ensure that a 'nil symbol is returned in the results on error set the error arg to ''nil 
+  not 'nil or nil
 
- (rect tl br &key (inctl t) (incbr t) rows cols error)
-This is a wrapper around `extract-matching-rectangle' (which see). It takes exactly the
-same arguments, but also allows the tl argument to be omitted even when the rows & cols
-arguments are omitted, in which case tl is set to the current cursor position.
-Note: to ensure that a 'nil symbol is returned in the results on error set the error arg to ''nil 
-not 'nil or nil
+  (rect tl br &key (inctl t) (incbr t) rows cols error)
+  This is a wrapper around `extract-matching-rectangle' (which see). It takes exactly the
+  same arguments, but also allows the tl argument to be omitted even when the rows & cols
+  arguments are omitted, in which case tl is set to the current cursor position.
+  Note: to ensure that a 'nil symbol is returned in the results on error set the error arg to ''nil 
+  not 'nil or nil
 
- (move &rest all &key fwdregex bwdregex fwdchar bwdchar 
-      fwdline bwdline fwdword bwdword fwdmark bwdmark pos)
-This function is used for repositioning the cursor in between calls to extraction functions.
-The keyword args are processed sequentially, each one specifying a cursor movement, and may
-contain repeats. The keyword args specify the following movements:
+  (move &rest all &key fwdregex bwdregex fwdchar bwdchar 
+	fwdline bwdline fwdword bwdword fwdmark bwdmark pos)
+  This function is used for repositioning the cursor in between calls to extraction functions.
+  The keyword args are processed sequentially, each one specifying a cursor movement, and may
+  contain repeats. The keyword args specify the following movements:
 
-   fwdregex/bwdregex - call `re-search-forward'/`re-search-backward' with fwdregex/bwdregex as 
-   argument. If the arg is a list then call the appropriate function with all arguments in the 
-   list (in order).
-   
-   pos             - call `goto-char' with pos as argument
-   
-   fwdchar/bwdchar - call `forward-char'/`backward-char' with fwdchar/bwdchar as argument.
-   
-   fwdline/bwdline - call `forward-line'/`backward-line' with fwdline/bwdline as argument.
-   
-   fwdword/bwdword - call `right-word'/`left-word' with fwdword/bwdword as argument.
-   
-   fwdline/bwdline - call `forward-line' with fwdline/(- bwdline) as argument.
-   
-   fwdmark/bwdmark - before each extraction/movement function is called, the current cursor
-                     position is added to the end of a list. The fwdmark/bwdmark args tell the
-                     move function to move forward from the start or backward from the end of 
-                     that list. E.g. \":bwdmark 2\" will move the cursor to the position before
-                     the 2nd last function call.
+  fwdregex/bwdregex - call `re-search-forward'/`re-search-backward' with fwdregex/bwdregex as 
+  argument. If the arg is a list then call the appropriate function with all arguments in the 
+  list (in order).
+  
+  pos             - call `goto-char' with pos as argument
+  
+  fwdchar/bwdchar - call `forward-char'/`backward-char' with fwdchar/bwdchar as argument.
+  
+  fwdline/bwdline - call `forward-line'/`backward-line' with fwdline/bwdline as argument.
+  
+  fwdword/bwdword - call `right-word'/`left-word' with fwdword/bwdword as argument.
+  
+  fwdline/bwdline - call `forward-line' with fwdline/(- bwdline) as argument.
+  
+  fwdmark/bwdmark - before each extraction/movement function is called, the current cursor
+  position is added to the end of a list. The fwdmark/bwdmark args tell the
+  move function to move forward from the start or backward from the end of 
+  that list. E.g. \":bwdmark 2\" will move the cursor to the position before
+  the 2nd last function call.
 
-   row/col         - move to a particular row/column, while staying in the same column/row that
-                     you started in. Extra whitespace will be added to the row if necessary to 
-                     ensure that the required column exists (see `move-to-column').
+  row/col         - move to a particular row/column, while staying in the same column/row that
+  you started in. Extra whitespace will be added to the row if necessary to 
+  ensure that the required column exists (see `move-to-column').
 
-   rowend/colend   - move to the end of the current row/column.   
+  rowend/colend   - move to the end of the current row/column.   
 
- For example (move :bwdmark 3 :fwdregex \"foo\" :fwdword 2) will first move the cursor to the position
- it was in just before the 3rd previous function call, then move to the next occurrence of \"foo\",
- and then move forward 2 words.
+  For example (move :bwdmark 3 :fwdregex \"foo\" :fwdword 2) will first move the cursor to the position
+  it was in just before the 3rd previous function call, then move to the next occurrence of \"foo\",
+  and then move forward 2 words.
 
- (transform (regexp rep strs &key fixedcase literal subexp start idxs)
-This function is a wrapper around `replace-regexp-in-string' for transforming extracted strings.
-The STRS argument can be a call to an extraction function that returns a string or list of strings.
-The keyword argument IDXS can be a single index or a list of indexes indicating which elements of
-STRS should be transformed. The other arguments are the same as for `replace-regexp-in-string'.
-Examples: 
-   (transform \"this\" \"that\" (rect \"foo\" \"baa\") :idxs '(1 4))
+  (transform (regexp rep strs &key fixedcase literal subexp start idxs)
+	     This function is a wrapper around `replace-regexp-in-string' for transforming extracted strings.
+	     The STRS argument can be a call to an extraction function that returns a string or list of strings.
+	     The keyword argument IDXS can be a single index or a list of indexes indicating which elements of
+	     STRS should be transformed. The other arguments are the same as for `replace-regexp-in-string'.
+	     Examples: 
+	     (transform \"this\" \"that\" (rect \"foo\" \"baa\") :idxs '(1 4))
 
-   explanation: replace \"this\" with \"that\" in the 2nd and 5th strings of the rectangle between \"foo\" and \"baa\"
+	     explanation: replace \"this\" with \"that\" in the 2nd and 5th strings of the rectangle between \"foo\" and \"baa\"
 
-  (transform \"\\\\([0-9]+\\\\)/\\\\([0-9]+\\\\)/\\\\([0-9]+\\\\)\" \"[\\\\3-\\\\2-\\\\1]\"
-           (regex \"\\\\([0-9]+\\\\)/\\\\([0-9]+\\\\)/\\\\([0-9]+\\\\)\"))
+	     (transform \"\\\\([0-9]+\\\\)/\\\\([0-9]+\\\\)/\\\\([0-9]+\\\\)\" \"[\\\\3-\\\\2-\\\\1]\"
+			(regex \"\\\\([0-9]+\\\\)/\\\\([0-9]+\\\\)/\\\\([0-9]+\\\\)\"))
 
-   explanation: extract a date in the form DD/MM/YYYY and convert to an org-timestamp
-                (you may want to add something like this to `extract-text-user-wrappers')")
+	     explanation: extract a date in the form DD/MM/YYYY and convert to an org-timestamp
+	     (you may want to add something like this to `extract-text-user-wrappers')")
 
 ;;;###autoload
 (defcustom extract-text-user-progs nil
@@ -308,28 +329,30 @@ If optional arg CURRENTONLY is non-nil, only remove `extract-text-overlays'."
 (defun extract-text-debug-next (regions &optional msg msgregions)
   "Prompt user to step forward through debugging.
 REGIONS should be a list of cons cells each of which contains a pair (start . end)
-of positions delimiting regions to be highlighted.
+of positions delimiting regions to be highlighted. If REGIONS is nil then no changes
+to highlighting will be applied.
 Optional MSG is a string to prepend to the user prompt, and MSGREGIONS is an optional
 list of cons cells indicating regions of MSG that should be highlighted"
-  (while extract-text-overlays
-    (let* ((ov (car extract-text-overlays))
-	   (ovstart (overlay-start ov))
-	   (ovend (overlay-end ov)))
-      (when (and ovstart ovend)
-	(let ((ov2 (make-overlay ovstart ovend)))
-	  (overlay-put ov2 'priority 1000)
-	  (overlay-put ov2 'face lazy-highlight-face)
-	  (overlay-put ov2 'window (selected-window))
-	  (setq extract-text-old-overlays (cons ov2 extract-text-old-overlays))))
-      (delete-overlay ov)
-      (setq extract-text-overlays
-	    (cdr extract-text-overlays))))
-  (cl-loop for (beg . end) in regions
-	   do (let ((ov2 (make-overlay beg end)))
-		(overlay-put ov2 'priority 1001)
-		(overlay-put ov2 'face isearch-face)
-		(setq extract-text-overlays
-		      (cons ov2 extract-text-overlays))))
+  (when regions
+    (while extract-text-overlays
+      (let* ((ov (car extract-text-overlays))
+	     (ovstart (overlay-start ov))
+	     (ovend (overlay-end ov)))
+	(when (and ovstart ovend)
+	  (let ((ov2 (make-overlay ovstart ovend)))
+	    (overlay-put ov2 'priority 1000)
+	    (overlay-put ov2 'face lazy-highlight-face)
+	    (overlay-put ov2 'window (selected-window))
+	    (setq extract-text-old-overlays (cons ov2 extract-text-old-overlays))))
+	(delete-overlay ov)
+	(setq extract-text-overlays
+	      (cdr extract-text-overlays))))
+    (cl-loop for (beg . end) in regions
+	     do (let ((ov2 (make-overlay beg end)))
+		  (overlay-put ov2 'priority 1001)
+		  (overlay-put ov2 'face isearch-face)
+		  (setq extract-text-overlays
+			(cons ov2 extract-text-overlays)))))
   (let ((inhibit-quit t))
     (cl-loop for (beg . end) in msgregions
 	     do (setq msg (extract-text-propertize-string
