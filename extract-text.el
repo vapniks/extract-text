@@ -840,8 +840,9 @@ In all cases the function will return the results after processing with POSTPROC
 
 If region is active, restrict extraction to that region.
 Arguments SPEC, POSTPROC, EXPORT, CONVFN & PARAMS are the same as for `extract-text-from-buffers'.
-If the DEBUG arg is non-nil then \":DEBUG t\" will be added to SPEC so you can step through the
-the extractions one at a time.
+If the DEBUG arg is a positive number or prefix arg then \":DEBUG t\" will be added to SPEC so you 
+can step through the the extractions one at a time. If the DEBUG or prefix arg is negative, then 
+any existing debug specification in SPEC will be removed.
 
 Note: when target is an org-table the top level extractions appear in the same row as separate columns.
 If you want multiple rows you may need to alter SPEC so that each extraction is wrapped in a list and 
@@ -851,13 +852,13 @@ then set POSTPROC to `-flatten-1'."
 		      (postproc (second prog))
 		      (exportargs (extract-text-choose-export-args)))
 		 (list spec postproc (car exportargs) (second exportargs) (third exportargs)
-		       current-prefix-arg)))
+		       (if current-prefix-arg (prefix-numeric-value current-prefix-arg)))))
   (when (region-active-p)
     (extract-keyword-bindings 'spec nil :TL :BR :COLS)
     (setq spec (append spec (list :TL (region-beginning) :BR (region-end)))))
   (when debug
     (extract-keyword-bindings 'spec nil :DEBUG)
-    (setq spec (append spec (list :DEBUG (>= (prefix-numeric-value current-prefix-arg) 0)))))
+    (setq spec (append spec (list :DEBUG (or (not (numberp debug)) (>= debug 0))))))
   (let ((results (funcall (extract-text-compile-prog spec))))
     (if results
 	(extract-text-process-results (list results) postproc export convfn params)
