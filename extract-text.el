@@ -121,9 +121,9 @@ when the function is called by name --e.g. (wrapper arg1 arg2)--
 as part of `extract-text' (which see).
 
 Each wrapper function should return a string or list of strings,
-and may make use of the functions in `extract-text-builtin-wrappers',
-and also the DEBUG variable which indicates whether `extract-text'
-was called with a non-nil :DEBUG arg."
+and may make use of the functions in `extract-text-builtin-wrappers'.
+They may also check `extract-text-debugging' to see if debugging
+is currently being carried and make use of `extract-text-debug-next'."
   :group 'extract-text
   :type  '(repeat (cons (symbol :tag "Name")
                         (cons
@@ -136,71 +136,86 @@ was called with a non-nil :DEBUG arg."
   '((regex (regexp &key count startpos endpos (error t))
 	   (let ((txt (extract-matching-strings
 		       regexp :count count :startpos startpos
-		       :endpos endpos :error error :debug DEBUG)))
+		       :endpos endpos :error error)))
 	     (if (listp txt)
 		 (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)
 	       txt)))
     (rect (tl br &rest restkeys &key (inctl t) (incbr t) rows cols (error t) idxs)
 	  (if (not (or tl (and rows cols))) (setq tl (point)))
-	  (apply 'extract-matching-rectangle tl br :debug DEBUG restkeys))
-    (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline bwdline
+	  (apply 'extract-matching-rectangle tl br restkeys))
+    (move (&rest restkeys &key fwdregex bwdregex fwdchar bwdchar fwdline bwdline
 		 fwdword bwdword fwdmark bwdmark pos col row rowend colend)
 	  (cl-flet ((debugit (fmtstr)
-			     (let ((cmdstr (concat "(move " (substring (format "%s" all) 1 -1) ")")))
+			     (let ((cmdstr (concat "(move " (substring (format "%s" restkeys) 1 -1) ")")))
 			       (save-match-data
 				 (extract-text-debug-next
 				  nil cmdstr (list (cons (string-match (format fmtstr key) cmdstr)
 							 (match-end 0))))))))
 	    (loop-over-keyword-args
-	     all (case key
-		   (:fwdregex (if (listp value) (apply 're-search-forward value)
-				(re-search-forward value))
-			      (if DEBUG (debugit "%s \"[^\"]*\"")))
-		   (:bwdregex (if (listp value) (apply 're-search-backward value)
-				(re-search-backward value))
-			      (if DEBUG (debugit "%s \"[^\"]*\"")))
-		   (:fwdchar (forward-char value)
-			     (if DEBUG (debugit "%s [0-9]*")))
-		   (:bwdchar (backward-char value)
-			     (if DEBUG (debugit "%s [0-9]*")))
-		   (:fwdline (forward-line value)
-			     (if DEBUG (debugit "%s [0-9]*")))
-		   (:bwdline (forward-line (- value))
-			     (if DEBUG (debugit "%s [0-9]*")))
-		   (:fwdword (right-word value)
-			     (if DEBUG (debugit "%s [0-9]*")))
-		   (:bwdword (left-word value)
-			     (if DEBUG (debugit "%s [0-9]*")))
-		   (:fwdmark (if (last positions value) ;assumes `positions' list is in scope
-				 (goto-char (car (last positions value))))
-			     (if DEBUG (debugit "%s [0-9]*")))
-		   (:bwdmark (if (nth value positions) ;assumes `positions' list is in scope
-				 (goto-char (nth value positions)))
-			     (if DEBUG (debugit "%s [0-9]*")))
-		   (:pos (goto-char value)
-			 (if DEBUG (debugit "%s [0-9]*")))
-		   (:col (move-to-column value t)
-			 (if DEBUG (debugit "%s [0-9]*")))
-		   (:row (let ((col (current-column)))
-			   (goto-char (point-min))
-			   (forward-line (1- value))
-			   (move-to-column col t))
-			 (if DEBUG (debugit "%s [0-9]*")))
-		   (:rowend (end-of-line)
-			    (if DEBUG (debugit "%s [0-9]*")))
-		   (:colend (let ((col (current-column)))
-			      (goto-char (point-max))
-			      (move-to-column col t))
-			    (if DEBUG (debugit "%s [0-9]*"))))))
+	     restkeys (case key
+			(:fwdregex (if (listp value) (apply 're-search-forward value)
+				     (re-search-forward value))
+				   (if extract-text-debugging (debugit "%s \"[^\"]*\"")))
+			(:bwdregex (if (listp value) (apply 're-search-backward value)
+				     (re-search-backward value))
+				   (if extract-text-debugging (debugit "%s \"[^\"]*\"")))
+			(:fwdchar (forward-char value)
+				  (if extract-text-debugging (debugit "%s [0-9]*")))
+			(:bwdchar (backward-char value)
+				  (if extract-text-debugging (debugit "%s [0-9]*")))
+			(:fwdline (forward-line value)
+				  (if extract-text-debugging (debugit "%s [0-9]*")))
+			(:bwdline (forward-line (- value))
+				  (if extract-text-debugging (debugit "%s [0-9]*")))
+			(:fwdword (right-word value)
+				  (if extract-text-debugging (debugit "%s [0-9]*")))
+			(:bwdword (left-word value)
+				  (if extract-text-debugging (debugit "%s [0-9]*")))
+			(:fwdmark (if (last positions value) ;assumes `positions' list is in scope
+				      (goto-char (car (last positions value))))
+				  (if extract-text-debugging (debugit "%s [0-9]*")))
+			(:bwdmark (if (nth value positions) ;assumes `positions' list is in scope
+				      (goto-char (nth value positions)))
+				  (if extract-text-debugging (debugit "%s [0-9]*")))
+			(:pos (goto-char value)
+			      (if extract-text-debugging (debugit "%s [0-9]*")))
+			(:col (move-to-column value t)
+			      (if extract-text-debugging (debugit "%s [0-9]*")))
+			(:row (let ((col (current-column)))
+				(goto-char (point-min))
+				(forward-line (1- value))
+				(move-to-column col t))
+			      (if extract-text-debugging (debugit "%s [0-9]*")))
+			(:rowend (end-of-line)
+				 (if extract-text-debugging (debugit "%s [0-9]*")))
+			(:colend (let ((col (current-column)))
+				   (goto-char (point-max))
+				   (move-to-column col t))
+				 (if extract-text-debugging (debugit "%s [0-9]*"))))))
 	  'skip)
-    (transform (regexp rep strs &key fixedcase literal subexp start idxs)
+    ;; TODO: DEBUG handling for transform function
+    (transform (regexp rep strs &rest restkeys
+		       &key (fixedcase nil fixedcasep) (literal nil literalp) (subexp nil subexpp)
+		       (start nil startp) (idxs nil idxsp))
 	       (let ((strs (if (stringp strs) (list strs) strs))
 		     (idxs (if (listp idxs) idxs (list idxs))))
 		 (-map-indexed (lambda (idx str)
 				 (if (or (not idxs)
 					 (memq idx idxs))
-				     (replace-regexp-in-string
-				      regexp rep str fixedcase literal subexp start)
+				     (let ((new (replace-regexp-in-string
+						 regexp rep str fixedcase literal subexp start))
+					   (msg (concat (format "(transform %s %s " regexp rep)
+							(format (if (= (length strs) 1) "\"%s\"" "'%s")
+								strs)
+							(if fixedcasep (format " :fixedcase %s" fixedcase))
+							(if literalp (format " :literal %s" literalp))
+							(if subexpp (format " :subexp %s" subexp))
+							(if startp (format " :start %s" startp))
+							(if idxsp (format " :idxs '%s" idxs))
+							")")))
+				       (if extract-text-debugging
+					   (extract-text-debug-next nil msg))
+				       new)
 				   str)) strs))))
   "A list of builtin wrapper functions that can be used with `extract-text':
 
@@ -300,6 +315,9 @@ one of these programs and its arguments (in the case of interactive functions)."
 (defvar extract-text-overlays nil
   "List of overlays highlighting current matches while debugging.")
 
+(defvar extract-text-debugging nil
+  "Non-nil if currently debugging")
+
 (defcustom extract-text-reset-debug-highlights nil
   "If non-nil then debug highlighting will be reset on each new repetition."
   :group 'extract-text
@@ -356,11 +374,12 @@ list of cons cells indicating regions of MSG that should be highlighted"
     (cl-loop for (beg . end) in msgregions
 	     do (setq msg (extract-text-propertize-string
 			   msg beg end 'face isearch-face)))
-    (when (eq (read-char (format "%s\nPress any key to continue, or C-g to quit" msg))
-	      7)
-      (extract-text-dehighlight)
-      (setq inhibit-quit nil)
-      (keyboard-quit))))
+    (let ((key (read-char (format "%s\nPress any key to continue, or C-g to quit" msg)))) 
+      (case key
+	((7 113) (extract-text-dehighlight)
+	 (setq inhibit-quit nil)
+	 (keyboard-quit))
+	(99 (setq extract-text-debugging nil))))))
 
 ;;;###autoload
 (defun match-strings (regexp &optional str)
@@ -387,7 +406,7 @@ be the string searched."
 	   collect (match-string-no-properties i str)))
 
 ;;;###autoload
-(cl-defun extract-matching-strings (regexp &key count startpos endpos (error t) debug)
+(cl-defun extract-matching-strings (regexp &key count startpos endpos (error t))
   "Extract strings from current buffer that match subexpressions of REGEXP.
 If COUNT is supplied use the COUNT'th match of REGEXP.
 The returned list contains the whole match followed by matches to subexpressions 
@@ -397,10 +416,7 @@ If STARTPOS is supplied searching starts at that buffer position, otherwise it
 starts from the current position. If ENDPOS is supplied then the match must
 occur before that position.
 By default if no match is found then an error is thrown. If ERROR is set to anything
-other than t (including nil) then that value will be returned if there is an error.
-
-If DEBUG is non-nil then matches will be highlighted and the user will be prompted
-to continue after each match."
+other than t (including nil) then that value will be returned if there is an error."
   (if startpos (goto-char startpos))
   (let (matches)
     (if (condition-case err
@@ -410,13 +426,14 @@ to continue after each match."
 		       (t nil))))
 	(setq matches (match-strings-no-properties regexp))
       error)
-    (when debug
+    (when extract-text-debugging
       (let ((strpos1 -1)
 	    (strpos2 0)
 	    (rlen (length regexp))
 	    startpos2 endpos2)
 	(if (> (length matches) 1)
 	    (cl-loop for matchnum from 1 to (1- (length matches))
+		     while extract-text-debugging
 		     do (progn
 			  (setq strpos1 (string-match-p "\\\\(" regexp (min (1+ strpos1) rlen))
 				strpos2 (+ 2 (string-match-p "\\\\)" regexp (min strpos2 rlen))))
@@ -432,7 +449,7 @@ to continue after each match."
 
 ;;;###autoload
 (cl-defun extract-matching-rectangle (tl br &key (inctl t inctlp) (incbr t incbrp)
-					 (rows nil rowsp) (cols nil colsp) (error t) (idxs nil idxsp) debug)
+					 (rows nil rowsp) (cols nil colsp) (error t) (idxs nil idxsp))
   "Extract a rectangle of text (list of strings) from the current buffer.
 The rectangle can be specified in several different ways:
 
@@ -477,7 +494,7 @@ To return a subset of the rows of the extracted rectangle set the :IDXS argument
 a list of indices of rows to return (0 indicates 1st row), or just a single number
 to return a single row.
 
-If DEBUG is non-nil then matches will be highlighted and the user will be prompted
+If `extract-text-debugging' is non-nil then matches will be highlighted and the user will be prompted
 to continue after each match."
   ;; check we have the required arguments
   (if (not (and (or tl br)
@@ -547,39 +564,48 @@ to continue after each match."
 			(if incbrp (format ":incbr %s " incbr))
 			(if rowsp (format ":rows %s " rows))
 			(if colsp (format ":cols %s " cols))
-			(if idxsp (format ":idxs '%s)" idxs))))
+			(if idxsp (format ":idxs '%s" idxs))
+			")"))
 	   (strs (unless (memq 'nomatch (list tl2 br2))
 		   (cond
 		    ((and tl2 br2 (eq cols t))
 		     (prog1 (split-string (buffer-substring-no-properties tl2 br2) "\n")
-		       (if debug (extract-text-debug-next (list (cons tl2 br2)) msg))))
+		       (if extract-text-debugging
+			   (extract-text-debug-next (list (cons tl2 br2)) msg))))
 		    ((and tl2 br2 (eq rows t))
 		     (prog1 (extract-rectangle (adjust2 tl2 t) (adjust2 br2 nil))
-		       (if debug (extract-text-debug-next (rectcoords (adjust2 tl2 t) (adjust2 br2 nil)) msg))))
+		       (if extract-text-debugging
+			   (extract-text-debug-next (rectcoords (adjust2 tl2 t) (adjust2 br2 nil)) msg))))
 		    ((and tl2 br2)
 		     (prog1 (extract-rectangle tl2 br2)
-		       (if debug (extract-text-debug-next (rectcoords tl2 br2) msg))))
+		       (if extract-text-debugging
+			   (extract-text-debug-next (rectcoords tl2 br2) msg))))
 		    ((and tl2 (numberp rows) (eq cols t))
 		     (prog1 (split-string (buffer-substring-no-properties
 					   tl2 (adjust1 tl2 nil rows 1)) "\n")
-		       (if debug (extract-text-debug-next (list (cons tl2 (adjust1 tl2 nil rows 1))) msg))))
+		       (if extract-text-debugging
+			   (extract-text-debug-next (list (cons tl2 (adjust1 tl2 nil rows 1))) msg))))
 		    ((and br2 (numberp rows) (eq cols t))
 		     (prog1 (split-string (buffer-substring-no-properties (adjust1 br2 t rows 1) br2) "\n")
-		       (if debug (extract-text-debug-next (list (cons (adjust1 br2 t rows 1) br2)) msg))))
+		       (if extract-text-debugging
+			   (extract-text-debug-next (list (cons (adjust1 br2 t rows 1) br2)) msg))))
 		    ((and tl2 (numberp cols) (eq rows t))
 		     (prog1 (extract-rectangle (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil))
-		       (if debug (extract-text-debug-next (rectcoords (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil))
-							  msg))))
+		       (if extract-text-debugging
+			   (extract-text-debug-next (rectcoords (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil))
+						    msg))))
 		    ((and br2 (numberp cols) (eq rows t))
 		     (prog1 (extract-rectangle (adjust2 (adjust3 br2 cols nil) t) (adjust2 br2 nil))
-		       (if debug (extract-text-debug-next (rectcoords (adjust2 (adjust3 br2 cols nil) t) (adjust2 br2 nil))
-							  msg))))
+		       (if extract-text-debugging
+			   (extract-text-debug-next (rectcoords (adjust2 (adjust3 br2 cols nil) t) (adjust2 br2 nil))
+						    msg))))
 		    ((and (or tl2 br2) rows cols)
 		     (prog1 (extract-rectangle (or tl2 (adjust1 br2 t rows cols))
 					       (or br2 (adjust1 tl2 nil rows cols)))
-		       (if debug (extract-text-debug-next (rectcoords (or tl2 (adjust1 br2 t rows cols))
-								      (or br2 (adjust1 tl2 nil rows cols)))
-							  msg))))))))
+		       (if extract-text-debugging
+			   (extract-text-debug-next (rectcoords (or tl2 (adjust1 br2 t rows cols))
+								(or br2 (adjust1 tl2 nil rows cols)))
+						    msg))))))))
       (if (memq 'nomatch (list tl2 br2)) error (filter strs)))))
 
 ;;;###autoload
@@ -660,8 +686,6 @@ list.
            is thrown, and the return value used in place of the extraction. 
 
 :FLATTEN - specify that returned list should be flattened to this depth with `-flatten-n' function 
-:DEBUG   - if non-nil, step through extractions one by one, highlighting them and prompting the user to continue.
-           This is useful when checking your extraction program.
 
 The following keyword args are passed to `extract-matching-rectangle' (which see) to restrict the
 text to a rectangle in the current buffer before performing extractions: 
@@ -706,7 +730,7 @@ Explanation: extract the first 5 numbers from the current buffer. If there are f
 			  args3
 			(let ((args4 args3)) ;need this let form so we can use a symbol 'args4 to access the input
 			  `(let ,(extract-keyword-bindings
-				  'args4 t :REPS :ERROR :TL :BR (:INCTL t) (:INCBR t) :ROWS :COLS :FLATTEN :DEBUG)
+				  'args4 t :REPS :ERROR :TL :BR (:INCTL t) (:INCBR t) :ROWS :COLS :FLATTEN)
 			     ;; set defaults and get buffer containing text
 			     (let* ((REPS (or REPS 1))
 				    (FLATTEN (or FLATTEN 0))
@@ -720,7 +744,7 @@ Explanation: extract the first 5 numbers from the current buffer. If there are f
 				 ;; repeat the extraction for REPS repeats
 				 (cl-loop named 'overreps
 					  for i from 1 to REPS
-					  do (progn (if (and DEBUG extract-text-reset-debug-highlights)
+					  do (progn (if (and extract-text-debugging extract-text-reset-debug-highlights)
 							(extract-text-dehighlight))
 						    (let (results)
 						      (condition-case err2
@@ -868,9 +892,8 @@ In all cases the function will return the results after processing with POSTPROC
 
 If region is active, restrict extraction to that region.
 Arguments SPEC, POSTPROC, EXPORT, CONVFN & PARAMS are the same as for `extract-text-from-buffers'.
-If the DEBUG arg is a positive number or prefix arg then \":DEBUG t\" will be added to SPEC so you 
-can step through the the extractions one at a time. If the DEBUG or prefix arg is negative, then 
-any existing debug specification in SPEC will be removed.
+If the DEBUG arg is non-nil or a prefix arg is supplied then `extract-text-debugging' will be set
+to t so that `extract-text' will be run in debug mode.
 
 Note: when target is an org-table the top level extractions appear in the same row as separate columns.
 If you want multiple rows you may need to alter SPEC so that each extraction is wrapped in a list and 
@@ -880,13 +903,11 @@ then set POSTPROC to `-flatten-1'."
 		      (postproc (second prog))
 		      (exportargs (extract-text-choose-export-args)))
 		 (list spec postproc (car exportargs) (second exportargs) (third exportargs)
-		       (if current-prefix-arg (prefix-numeric-value current-prefix-arg)))))
+		       current-prefix-arg)))
   (when (region-active-p)
     (extract-keyword-bindings 'spec nil :TL :BR :COLS)
     (setq spec (append spec (list :TL (region-beginning) :BR (region-end)))))
-  (when debug
-    (extract-keyword-bindings 'spec nil :DEBUG)
-    (setq spec (append spec (list :DEBUG (or (not (numberp debug)) (>= debug 0))))))
+  (setq extract-text-debugging debug)
   (let ((results (funcall (extract-text-compile-prog spec))))
     (if results
 	(extract-text-process-results (list results) postproc export convfn params)
@@ -920,6 +941,7 @@ See the documentation of that function for further details."
 		      (postproc (second prog))
 		      (exportargs (extract-text-choose-export-args)))
 		 (list buffers spec postproc (car exportargs) (second exportargs) (third exportargs))))
+  (setq extract-text-debugging nil)
   (let* ((buffers (if (stringp buffers)
 		      (cl-loop for buf in (buffer-list)
 			       for name = (buffer-name buf)
@@ -955,6 +977,7 @@ All other arguments are the same as for `extract-text-from-buffers'."
 		      (postproc (second prog))
 		      (exportargs (extract-text-choose-export-args)))
 		 (list buffers spec postproc (car exportargs) (second exportargs) (third exportargs))))
+  (setq extract-text-debugging nil)
   (let* ((files (cond ((stringp files) (file-expand-wildcards files))
 		      ((listp files) files)
 		      (t (error "Invalid argument for files"))))
