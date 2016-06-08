@@ -135,8 +135,7 @@ was called with a non-nil :DEBUG arg."
   '((regex (regexp &key count startpos endpos (error t))
 	   (let ((txt (extract-matching-strings
 		       regexp :count count :startpos startpos
-		       :endpos endpos :error error :debug DEBUG))
-		 (fn (if (> (regexp-opt-depth regexp) 0) 'cdr 'identity)))
+		       :endpos endpos :error error :debug DEBUG)))
 	     (if (listp txt)
 		 (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)
 	       txt)))
@@ -323,7 +322,8 @@ list of cons cells indicating regions of MSG that should be highlighted"
 	  (overlay-put ov2 'window (selected-window))
 	  (setq extract-text-old-overlays (cons ov2 extract-text-old-overlays))))
       (delete-overlay ov)
-      (setq extract-text-overlays (cdr extract-text-overlays))))
+      (setq extract-text-overlays
+	    (cdr extract-text-overlays))))
   (cl-loop for (beg . end) in regions
 	   do (let ((ov2 (make-overlay beg end)))
 		(overlay-put ov2 'priority 1001)
@@ -510,35 +510,46 @@ to continue after each match."
 			   (setq scol (current-column)
 				 width (- ecol scol))
 			   (while (< (point) br3)
-			     (sets pairs (cons (cons (point) (+ (point) width)) pairs))
+			     (setq pairs (cons (cons (point) (+ (point) width)) pairs))
 			     (forward-line 1)
-			     (move-to-column scol t)))
-			 pairs))		;make up the rectangle delimited by tl3 and br3
+			     (move-to-column scol t))
+			   pairs))) ;make up the rectangle delimited by tl3 and br3
     (let* ((tl2 (getpos tl (if inctl 'match-beginning 'match-end)))
 	   (br2 (getpos br (if incbr 'match-end 'match-beginning)))
+	   (msg (format "Rectangle: TL=%s, BR=%s, INCTL=%s, INCBR=%s, ROWS=%s, COLS=%s, IDXS=%s"
+			tl br inctl incbr rows cols idxs))
 	   (strs (unless (memq 'nomatch (list tl2 br2))
 		   (cond
 		    ((and tl2 br2 (eq cols t))
 		     (prog1 (split-string (buffer-substring-no-properties tl2 br2) "\n")
 		       (if debug (extract-text-debug-next (list (cons tl2 br2))))))
 		    ((and tl2 br2 (eq rows t))
-		     (extract-rectangle (adjust2 tl2 t) (adjust2 br2 nil)))
-		    ((and tl2 br2) (extract-rectangle tl2 br2))
+		     (prog1 (extract-rectangle (adjust2 tl2 t) (adjust2 br2 nil))
+		       (extract-text-debug-next (rectcoords (adjust2 tl2 t) (adjust2 br2 nil)) msg)))
+		    ((and tl2 br2)
+		     (prog1 (extract-rectangle tl2 br2)
+		       (extract-text-debug-next (rectcoords tl2 br2) msg)))
 		    ((and tl2 (numberp rows) (eq cols t))
 		     (prog1 (split-string (buffer-substring-no-properties
 					   tl2 (adjust1 tl2 nil rows 1)) "\n")
 		       (if debug (extract-text-debug-next (list (cons tl2 (adjust1 tl2 nil rows 1)))))))
 		    ((and br2 (numberp rows) (eq cols t))
-		     (prog1 (split-string (buffer-substring-no-properties
-					   (adjust1 br2 t rows 1) br2) "\n")
+		     (prog1 (split-string (buffer-substring-no-properties (adjust1 br2 t rows 1) br2) "\n")
 		       (if debug (extract-text-debug-next (list (cons (adjust1 br2 t rows 1) br2))))))
 		    ((and tl2 (numberp cols) (eq rows t))
-		     (extract-rectangle (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil)))
+		     (prog1 (extract-rectangle (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil))
+		       (extract-text-debug-next (rectcoords (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil))
+						msg)))
 		    ((and br2 (numberp cols) (eq rows t))
-		     (extract-rectangle (adjust2 (adjust3 br2 cols nil) t) (adjust2 br2 nil)))
+		     (prog1 (extract-rectangle (adjust2 (adjust3 br2 cols nil) t) (adjust2 br2 nil))
+		       (extract-text-debug-next (rectcoords (adjust2 (adjust3 br2 cols nil) t) (adjust2 br2 nil))
+						msg)))
 		    ((and (or tl2 br2) rows cols)
-		     (extract-rectangle (or tl2 (adjust1 br2 t rows cols))
-					(or br2 (adjust1 tl2 nil rows cols))))))))
+		     (prog1 (extract-rectangle (or tl2 (adjust1 br2 t rows cols))
+					       (or br2 (adjust1 tl2 nil rows cols)))
+		       (extract-text-debug-next (rectcoords (or tl2 (adjust1 br2 t rows cols))
+							    (or br2 (adjust1 tl2 nil rows cols)))
+						msg)))))))
       (cond ((memq 'nomatch (list tl2 br2)) error)
 	    ((numberp idxs) (-select-by-indices (list idxs) strs))
 	    ((and (not (null idxs)) (listp idxs)) (-select-by-indices idxs strs))
@@ -681,52 +692,52 @@ Explanation: extract the first 5 numbers from the current buffer. If there are f
 			       (with-current-buffer buf2
 				 ;; repeat the extraction for REPS repeats
 				 (cl-loop named 'overreps
-					  for i from 1 to REPS do
-					  (if (and DEBUG extract-text-reset-debug-highlights)
-					      (extract-text-dehighlight))
-					  (let (results)
-					    (condition-case err2
-						(progn
-						  ,@(cl-loop 
-						     for spec in args4 collect
-						     `(setq positions (cons (point) positions)
-							    results (remove
-								     'skip
-								     (cons
-								      (condition-case err
-									  (recurse ,spec)
-									(error (if (or
-										    (null ERROR)
-										    (memq ERROR
-											  '(skipall stop stopall)))
-										   (signal (car err) (cdr err))
-										 (if (and (listp ERROR)
-											  (symbolp (car ERROR))
-											  (or (functionp (car ERROR))
-											      (subrp (symbol-function
-												      (car ERROR)))
-											      (macrop (car ERROR))))
-										     (eval ERROR)
-										   ERROR))))
-								      results)))))
-					      (error (case ERROR
-						       (skipall (setq results nil))
-						       (stopall (cl-return-from 'overreps))
-						       (stop (when results
-							       (setq allresults
-								     (cons (-flatten-1 (reverse results))
-									   allresults)))
-							     (cl-return-from 'overreps))
-						       (t (if (or TL BR) (kill-buffer buf2))
-							  (signal (car err2) (cdr err2))))))
-					    (when results
-					      (setq allresults
-						    (cons (-flatten-1 (reverse results)) allresults))))))
+					  for i from 1 to REPS
+					  do (progn (if (and DEBUG extract-text-reset-debug-highlights)
+							(extract-text-dehighlight))
+						    (let (results)
+						      (condition-case err2
+							  (progn
+							    ,@(cl-loop 
+							       for spec in args4 collect
+							       `(setq positions (cons (point) positions)
+								      results (remove
+									       'skip
+									       (cons
+										(condition-case err
+										    (recurse ,spec)
+										  (error (if (or
+											      (null ERROR)
+											      (memq ERROR
+												    '(skipall stop stopall)))
+											     (signal (car err) (cdr err))
+											   (if (and (listp ERROR)
+												    (symbolp (car ERROR))
+												    (or (functionp (car ERROR))
+													(subrp (symbol-function
+														(car ERROR)))
+													(macrop (car ERROR))))
+											       (eval ERROR)
+											     ERROR))))
+										results)))))
+							(error (case ERROR
+								 (skipall (setq results nil))
+								 (stopall (cl-return-from 'overreps))
+								 (stop (when results
+									 (setq allresults
+									       (cons (-flatten-1 (reverse results))
+										     allresults)))
+								       (cl-return-from 'overreps))
+								 (t (if (or TL BR) (kill-buffer buf2))
+								    (signal (car err2) (cdr err2))))))
+						      (when results
+							(setq allresults
+							      (cons (-flatten-1 (reverse results)) allresults)))))))
 			       (if (or TL BR) (kill-buffer buf2))
 			       (-flatten-n FLATTEN (reverse allresults))))))))
 	 (save-excursion (goto-char (point-min))
-			 (recurse ,args2)
-			 (extract-text-dehighlight))))))
+			 (prog1 (recurse ,args2)
+			   (extract-text-dehighlight)))))))
 
 ;; Better to build functions from other functions rather than using a function generating macro
 ;; since a function generated by a macro can't be easily debugged.
@@ -844,7 +855,9 @@ then set POSTPROC to `-flatten-1'."
     (setq spec (nconc spec (list :TL (region-beginning) :BR (region-end)
 				 :COLS (not current-prefix-arg)))))
   (let ((results (funcall (extract-text-compile-prog spec))))
-    (extract-text-process-results (list results) postproc export convfn params)))
+    (if results
+	(extract-text-process-results (list results) postproc export convfn params)
+      (error "No matching text found"))))
 
 ;;;###autoload
 (defun extract-text-from-buffers (buffers spec &optional postproc export convfn params)
