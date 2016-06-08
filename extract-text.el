@@ -140,10 +140,9 @@ was called with a non-nil :DEBUG arg."
 	     (if (listp txt)
 		 (if (> (regexp-opt-depth regexp) 0) (cdr txt) txt)
 	       txt)))
-    (rect (tl br &key (inctl t) (incbr t) rows cols (error t) idxs)
+    (rect (tl br &rest restkeys &key (inctl t) (incbr t) rows cols (error t) idxs)
 	  (if (not (or tl (and rows cols))) (setq tl (point)))
-	  (extract-matching-rectangle tl br :inctl inctl :incbr incbr :rows rows
-				      :cols cols :error error :idxs idxs :debug DEBUG))
+	  (apply 'extract-matching-rectangle tl br :debug DEBUG restkeys))
     (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline bwdline
 		 fwdword bwdword fwdmark bwdmark pos col row rowend colend)
 	  (cl-flet ((debugit (fmtstr)
@@ -424,15 +423,16 @@ to continue after each match."
 			  (extract-text-debug-next
 			   (list (cons (match-beginning matchnum)
 				       (match-end matchnum)))
-			   (concat "Matching regexp: " regexp)
-			   (list (cons (+ strpos1 17) (+ strpos2 17))))))
+			   (format "(regex \"%s\")" regexp)
+			   (list (cons (+ strpos1 8) (+ strpos2 8))))))
 	  (extract-text-debug-next
 	   (list (cons (match-beginning 0) (match-end 0)))
-	   (concat "Matching regexp: " regexp) (list (cons 17 (+ (length regexp) 17)))))))
+	   (format "(regex \"%s\")" regexp) (list (cons 8 (+ (length regexp) 8)))))))
     matches))
 
 ;;;###autoload
-(cl-defun extract-matching-rectangle (tl br &key (inctl t) (incbr t) rows cols (error t) idxs debug)
+(cl-defun extract-matching-rectangle (tl br &key (inctl t inctlp) (incbr t incbrp)
+					 (rows nil rowsp) (cols nil colsp) (error t) (idxs nil idxsp) debug)
   "Extract a rectangle of text (list of strings) from the current buffer.
 The rectangle can be specified in several different ways:
 
@@ -542,13 +542,17 @@ to continue after each match."
 			   (filter (reverse pairs)))))
     (let* ((tl2 (getpos tl (if inctl 'match-beginning 'match-end)))
 	   (br2 (getpos br (if incbr 'match-end 'match-beginning)))
-	   (msg (format "Rectangle: TL=%s, BR=%s, INCTL=%s, INCBR=%s, ROWS=%s, COLS=%s, IDXS=%s"
-			tl br inctl incbr rows cols idxs))
+	   (msg (concat (format "(rect %s %s " tl br)
+			(if inctlp (format ":inctl %s " inctl))
+			(if incbrp (format ":incbr %s " incbr))
+			(if rowsp (format ":rows %s " rows))
+			(if colsp (format ":cols %s " cols))
+			(if idxsp (format ":idxs '%s)" idxs))))
 	   (strs (unless (memq 'nomatch (list tl2 br2))
 		   (cond
 		    ((and tl2 br2 (eq cols t))
 		     (prog1 (split-string (buffer-substring-no-properties tl2 br2) "\n")
-		       (if debug (extract-text-debug-next (list (cons tl2 br2))))))
+		       (if debug (extract-text-debug-next (list (cons tl2 br2)) msg))))
 		    ((and tl2 br2 (eq rows t))
 		     (prog1 (extract-rectangle (adjust2 tl2 t) (adjust2 br2 nil))
 		       (if debug (extract-text-debug-next (rectcoords (adjust2 tl2 t) (adjust2 br2 nil)) msg))))
@@ -558,10 +562,10 @@ to continue after each match."
 		    ((and tl2 (numberp rows) (eq cols t))
 		     (prog1 (split-string (buffer-substring-no-properties
 					   tl2 (adjust1 tl2 nil rows 1)) "\n")
-		       (if debug (extract-text-debug-next (list (cons tl2 (adjust1 tl2 nil rows 1)))))))
+		       (if debug (extract-text-debug-next (list (cons tl2 (adjust1 tl2 nil rows 1))) msg))))
 		    ((and br2 (numberp rows) (eq cols t))
 		     (prog1 (split-string (buffer-substring-no-properties (adjust1 br2 t rows 1) br2) "\n")
-		       (if debug (extract-text-debug-next (list (cons (adjust1 br2 t rows 1) br2))))))
+		       (if debug (extract-text-debug-next (list (cons (adjust1 br2 t rows 1) br2)) msg))))
 		    ((and tl2 (numberp cols) (eq rows t))
 		     (prog1 (extract-rectangle (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil))
 		       (if debug (extract-text-debug-next (rectcoords (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil))
