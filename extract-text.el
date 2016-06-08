@@ -141,9 +141,8 @@ was called with a non-nil :DEBUG arg."
 	       txt)))
     (rect (tl br &key (inctl t) (incbr t) rows cols (error t) idxs)
 	  (if (not (or tl (and rows cols))) (setq tl (point)))
-	  (extract-matching-rectangle
-	   tl br :inctl inctl :incbr incbr :rows rows
-	   :cols cols :error error :idxs idxs))
+	  (extract-matching-rectangle tl br :inctl inctl :incbr incbr :rows rows
+				      :cols cols :error error :idxs idxs :debug DEBUG))
     (move (&rest all &key fwdregex bwdregex fwdchar bwdchar fwdline bwdline
 		 fwdword bwdword fwdmark bwdmark pos col row rowend colend)
 	  (loop-over-keyword-args
@@ -525,10 +524,10 @@ to continue after each match."
 		       (if debug (extract-text-debug-next (list (cons tl2 br2))))))
 		    ((and tl2 br2 (eq rows t))
 		     (prog1 (extract-rectangle (adjust2 tl2 t) (adjust2 br2 nil))
-		       (extract-text-debug-next (rectcoords (adjust2 tl2 t) (adjust2 br2 nil)) msg)))
+		       (if debug (extract-text-debug-next (rectcoords (adjust2 tl2 t) (adjust2 br2 nil)) msg))))
 		    ((and tl2 br2)
 		     (prog1 (extract-rectangle tl2 br2)
-		       (extract-text-debug-next (rectcoords tl2 br2) msg)))
+		       (if debug (extract-text-debug-next (rectcoords tl2 br2) msg))))
 		    ((and tl2 (numberp rows) (eq cols t))
 		     (prog1 (split-string (buffer-substring-no-properties
 					   tl2 (adjust1 tl2 nil rows 1)) "\n")
@@ -538,18 +537,18 @@ to continue after each match."
 		       (if debug (extract-text-debug-next (list (cons (adjust1 br2 t rows 1) br2))))))
 		    ((and tl2 (numberp cols) (eq rows t))
 		     (prog1 (extract-rectangle (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil))
-		       (extract-text-debug-next (rectcoords (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil))
-						msg)))
+		       (if debug (extract-text-debug-next (rectcoords (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil))
+							  msg))))
 		    ((and br2 (numberp cols) (eq rows t))
 		     (prog1 (extract-rectangle (adjust2 (adjust3 br2 cols nil) t) (adjust2 br2 nil))
-		       (extract-text-debug-next (rectcoords (adjust2 (adjust3 br2 cols nil) t) (adjust2 br2 nil))
-						msg)))
+		       (if debug (extract-text-debug-next (rectcoords (adjust2 (adjust3 br2 cols nil) t) (adjust2 br2 nil))
+							  msg))))
 		    ((and (or tl2 br2) rows cols)
 		     (prog1 (extract-rectangle (or tl2 (adjust1 br2 t rows cols))
 					       (or br2 (adjust1 tl2 nil rows cols)))
-		       (extract-text-debug-next (rectcoords (or tl2 (adjust1 br2 t rows cols))
-							    (or br2 (adjust1 tl2 nil rows cols)))
-						msg)))))))
+		       (if debug (extract-text-debug-next (rectcoords (or tl2 (adjust1 br2 t rows cols))
+								      (or br2 (adjust1 tl2 nil rows cols)))
+							  msg))))))))
       (cond ((memq 'nomatch (list tl2 br2)) error)
 	    ((numberp idxs) (-select-by-indices (list idxs) strs))
 	    ((and (not (null idxs)) (listp idxs)) (-select-by-indices idxs strs))
@@ -836,11 +835,13 @@ In all cases the function will return the results after processing with POSTPROC
 
 ;; TODO make sure result are in correct form for all export types
 ;;;###autoload
-(defun extract-text-from-current-buffer (spec &optional postproc export convfn params)
+(defun extract-text-from-current-buffer (spec &optional postproc export convfn params debug)
   "Extract text from the current buffer, or active region.
 
 If region is active, restrict extraction to that region.
 Arguments SPEC, POSTPROC, EXPORT, CONVFN & PARAMS are the same as for `extract-text-from-buffers'.
+If the DEBUG arg is non-nil then \":DEBUG t\" will be added to SPEC so you can step through the
+the extractions one at a time.
 
 Note: when target is an org-table the top level extractions appear in the same row as separate columns.
 If you want multiple rows you may need to alter SPEC so that each extraction is wrapped in a list and 
@@ -849,11 +850,14 @@ then set POSTPROC to `-flatten-1'."
 		      (spec (car prog))
 		      (postproc (second prog))
 		      (exportargs (extract-text-choose-export-args)))
-		 (list spec postproc (car exportargs) (second exportargs) (third exportargs))))
+		 (list spec postproc (car exportargs) (second exportargs) (third exportargs)
+		       current-prefix-arg)))
   (when (region-active-p)
     (extract-keyword-bindings 'spec nil :TL :BR :COLS)
-    (setq spec (nconc spec (list :TL (region-beginning) :BR (region-end)
-				 :COLS (not current-prefix-arg)))))
+    (setq spec (append spec (list :TL (region-beginning) :BR (region-end)))))
+  (when debug
+    (extract-keyword-bindings 'spec nil :DEBUG)
+    (setq spec (append spec (list :DEBUG (>= (prefix-numeric-value current-prefix-arg) 0)))))
   (let ((results (funcall (extract-text-compile-prog spec))))
     (if results
 	(extract-text-process-results (list results) postproc export convfn params)
