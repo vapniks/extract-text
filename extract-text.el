@@ -219,14 +219,14 @@ is currently being carried and make use of `extract-text-debug-next'."
 					   ;; in the debug message highlight the part of the command
 					   ;; containing the string to be transformed, and the text
 					   ;; after the arrow that shows the transformed string
-					   (let ((beg (+ 13 (length (prin1-to-string regexp))
-							 (length (prin1-to-string rep))
+					   (let ((beg (+ 13 (prin1length regexp)
+							 (prin1length rep)
 							 (cl-loop for i from 0 to (1- idx)
-								  sum (1+ (length (prin1-to-string (nth i strs)))))
+								  sum (1+ (prin1length (nth i strs))))
 							 (if onlyone 0 2)))
 						 (msg2 (concat msg " -> " (format "%S" new))))
 					     (extract-text-debug-next
-					      nil msg2 (list (cons beg (+ beg (length (prin1-to-string str))))
+					      nil msg2 (list (cons beg (+ beg (prin1length str)))
 							     (cons (+ (length msg) 4) (length msg2))))))
 				       new)
 				   str)) strs))))
@@ -335,6 +335,10 @@ one of these programs and its arguments (in the case of interactive functions)."
   "If non-nil then debug highlighting will be reset on each new repetition."
   :group 'extract-text
   :type 'boolean)
+
+(defsubst prin1length (str)
+  "Return the length of the printed representation of string STR."
+  (length (prin1-to-string str)))
 
 (defun extract-text-dehighlight (&optional currentonly)
   "Remove debug highlighting.
@@ -446,12 +450,12 @@ other than t (including nil) then that value will be returned if there is an err
 			  (extract-text-debug-next
 			   (list (cons (match-beginning matchnum) (match-end matchnum)))
 			   (format "(regex %S)" regexp)
-			   (list (cons (+ 6 (length (prin1-to-string (substring regexp 0 beg))))
-				       (+ 6 (length (prin1-to-string (substring regexp 0 end)))))))))
+			   (list (cons (+ 6 (prin1length (substring regexp 0 beg)))
+				       (+ 6 (prin1length (substring regexp 0 end))))))))
 	  (extract-text-debug-next
 	   (list (cons (match-beginning 0) (match-end 0)))
 	   (format "(regex %S)" regexp)
-	   (list (cons 7 (+ (length (prin1-to-string regexp)) 7)))))))
+	   (list (cons 7 (+ (prin1length regexp) 7)))))))
     matches))
 
 ;;;###autoload
