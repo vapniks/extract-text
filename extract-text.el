@@ -196,32 +196,37 @@ is currently being carried and make use of `extract-text-debug-next'."
     (transform (regexp rep strs &rest restkeys
 		       &key (fixedcase nil fixedcasep) (literal nil literalp) (subexp nil subexpp)
 		       (start nil startp) (idxs nil idxsp))
-	       (let ((strs (if (stringp strs) (list strs) strs))
-		     (idxs (if (listp idxs) idxs (list idxs)))
-		     (msg (if extract-text-debugging
-			      (concat (format "(transform %S %S " regexp rep)
-				      (format (if (= (length strs) 1) "%S" "'%S")
-					      (if (= (length strs) 1) (car strs) strs))
-				      (if fixedcasep (format " :fixedcase %S" fixedcase))
-				      (if literalp (format " :literal %S" literalp))
-				      (if subexpp (format " :subexp %S" subexp))
-				      (if startp (format " :start %S" startp))
-				      (if idxsp (format " :idxs '%S" idxs))
-				      ")"))))
+	       (let* ((strs (if (stringp strs) (list strs) strs))
+		      (idxs (if (listp idxs) idxs (list idxs)))
+		      (onlyone (= (length strs) 1))
+		      (msg (if extract-text-debugging
+			       (concat (format "(transform %S %S " regexp rep)
+				       (if onlyone (format "%S" (car strs))
+					 (format "'%S" strs))
+				       (if fixedcasep (format " :fixedcase %S" fixedcase))
+				       (if literalp (format " :literal %S" literalp))
+				       (if subexpp (format " :subexp %S" subexp))
+				       (if startp (format " :start %S" startp))
+				       (if idxsp (format " :idxs '%S" idxs))
+				       ")"))))
 		 (-map-indexed (lambda (idx str)
 				 (if (or (not idxs) (memq idx idxs))
 				     (let ((new (replace-regexp-in-string
-						 regexp rep str fixedcase literal subexp start))
-					   (oneonly (= (length strs) 1)))
+						 regexp rep str fixedcase literal subexp start)))
+				       ;; only start debugging if a transformation is actually applied
 				       (if (and extract-text-debugging
 						(not (equal new str)))
-					   (let ((beg (+ 17 (length regexp) (length rep)
+					   ;; in the debug message highlight the part of the command
+					   ;; containing the string to be transformed, and the text
+					   ;; after the arrow that shows the transformed string
+					   (let ((beg (+ 13 (length (prin1-to-string regexp))
+							 (length (prin1-to-string rep))
 							 (cl-loop for i from 0 to (1- idx)
-								  sum (+ 3 (length (nth i strs))))
-							 (if oneonly 0 2)))
-						 (msg2 (concat msg " -> \"" new "\"")))
+								  sum (1+ (length (prin1-to-string (nth i strs)))))
+							 (if onlyone 0 2)))
+						 (msg2 (concat msg " -> " (format "%S" new))))
 					     (extract-text-debug-next
-					      nil msg2 (list (cons beg (+ beg (length str) 2))
+					      nil msg2 (list (cons beg (+ beg (length (prin1-to-string str))))
 							     (cons (+ (length msg) 4) (length msg2))))))
 				       new)
 				   str)) strs))))
