@@ -130,7 +130,6 @@ is currently being carried and make use of `extract-text-debug-next'."
 			 (restricted-sexp :match-alternatives (listp) :tag "Arglist")
 			 (repeat (sexp :tag "Expression"))))))
 
-;; TODO: DEBUG for move function (also fix debug for `extract-matching-rectangle')
 ;;;###autoload
 (defvar extract-text-builtin-wrappers
   '((regex (regexp &key count startpos endpos (error t))
@@ -146,7 +145,7 @@ is currently being carried and make use of `extract-text-debug-next'."
     (move (&rest restkeys &key fwdregex bwdregex fwdchar bwdchar fwdline bwdline
 		 fwdword bwdword fwdmark bwdmark pos col row rowend colend)
 	  (cl-flet ((debugit (fmtstr)
-			     (let ((cmdstr (concat "(move " (substring (format "%s" restkeys) 1 -1) ")")))
+			     (let ((cmdstr (concat "(move " (substring (format "%S" restkeys) 1 -1) ")")))
 			       (save-match-data
 				 (extract-text-debug-next
 				  nil cmdstr (list (cons (string-match (format fmtstr key) cmdstr)
@@ -155,66 +154,75 @@ is currently being carried and make use of `extract-text-debug-next'."
 	     restkeys (case key
 			(:fwdregex (if (listp value) (apply 're-search-forward value)
 				     (re-search-forward value))
-				   (if extract-text-debugging (debugit "%s \"[^\"]*\"")))
+				   (if extract-text-debugging (debugit "%S \"[^\"]*\"")))
 			(:bwdregex (if (listp value) (apply 're-search-backward value)
 				     (re-search-backward value))
-				   (if extract-text-debugging (debugit "%s \"[^\"]*\"")))
+				   (if extract-text-debugging (debugit "%S \"[^\"]*\"")))
 			(:fwdchar (forward-char value)
-				  (if extract-text-debugging (debugit "%s [0-9]*")))
+				  (if extract-text-debugging (debugit "%S [0-9]*")))
 			(:bwdchar (backward-char value)
-				  (if extract-text-debugging (debugit "%s [0-9]*")))
+				  (if extract-text-debugging (debugit "%S [0-9]*")))
 			(:fwdline (forward-line value)
-				  (if extract-text-debugging (debugit "%s [0-9]*")))
+				  (if extract-text-debugging (debugit "%S [0-9]*")))
 			(:bwdline (forward-line (- value))
-				  (if extract-text-debugging (debugit "%s [0-9]*")))
+				  (if extract-text-debugging (debugit "%S [0-9]*")))
 			(:fwdword (right-word value)
-				  (if extract-text-debugging (debugit "%s [0-9]*")))
+				  (if extract-text-debugging (debugit "%S [0-9]*")))
 			(:bwdword (left-word value)
-				  (if extract-text-debugging (debugit "%s [0-9]*")))
+				  (if extract-text-debugging (debugit "%S [0-9]*")))
 			(:fwdmark (if (last positions value) ;assumes `positions' list is in scope
 				      (goto-char (car (last positions value))))
-				  (if extract-text-debugging (debugit "%s [0-9]*")))
+				  (if extract-text-debugging (debugit "%S [0-9]*")))
 			(:bwdmark (if (nth value positions) ;assumes `positions' list is in scope
 				      (goto-char (nth value positions)))
-				  (if extract-text-debugging (debugit "%s [0-9]*")))
+				  (if extract-text-debugging (debugit "%S [0-9]*")))
 			(:pos (goto-char value)
-			      (if extract-text-debugging (debugit "%s [0-9]*")))
+			      (if extract-text-debugging (debugit "%S [0-9]*")))
 			(:col (move-to-column value t)
-			      (if extract-text-debugging (debugit "%s [0-9]*")))
+			      (if extract-text-debugging (debugit "%S [0-9]*")))
 			(:row (let ((col (current-column)))
 				(goto-char (point-min))
 				(forward-line (1- value))
 				(move-to-column col t))
-			      (if extract-text-debugging (debugit "%s [0-9]*")))
+			      (if extract-text-debugging (debugit "%S [0-9]*")))
 			(:rowend (end-of-line)
-				 (if extract-text-debugging (debugit "%s [0-9]*")))
+				 (if extract-text-debugging (debugit "%S [0-9]*")))
 			(:colend (let ((col (current-column)))
 				   (goto-char (point-max))
 				   (move-to-column col t))
-				 (if extract-text-debugging (debugit "%s [0-9]*"))))))
+				 (if extract-text-debugging (debugit "%S [0-9]*"))))))
 	  'skip)
     ;; TODO: DEBUG handling for transform function
     (transform (regexp rep strs &rest restkeys
 		       &key (fixedcase nil fixedcasep) (literal nil literalp) (subexp nil subexpp)
 		       (start nil startp) (idxs nil idxsp))
 	       (let ((strs (if (stringp strs) (list strs) strs))
-		     (idxs (if (listp idxs) idxs (list idxs))))
+		     (idxs (if (listp idxs) idxs (list idxs)))
+		     (msg (if extract-text-debugging
+			      (concat (format "(transform %S %S " regexp rep)
+				      (format (if (= (length strs) 1) "%S" "'%S")
+					      (if (= (length strs) 1) (car strs) strs))
+				      (if fixedcasep (format " :fixedcase %S" fixedcase))
+				      (if literalp (format " :literal %S" literalp))
+				      (if subexpp (format " :subexp %S" subexp))
+				      (if startp (format " :start %S" startp))
+				      (if idxsp (format " :idxs '%S" idxs))
+				      ")"))))
 		 (-map-indexed (lambda (idx str)
-				 (if (or (not idxs)
-					 (memq idx idxs))
+				 (if (or (not idxs) (memq idx idxs))
 				     (let ((new (replace-regexp-in-string
 						 regexp rep str fixedcase literal subexp start))
-					   (msg (concat (format "(transform %s %s " regexp rep)
-							(format (if (= (length strs) 1) "\"%s\"" "'%s")
-								strs)
-							(if fixedcasep (format " :fixedcase %s" fixedcase))
-							(if literalp (format " :literal %s" literalp))
-							(if subexpp (format " :subexp %s" subexp))
-							(if startp (format " :start %s" startp))
-							(if idxsp (format " :idxs '%s" idxs))
-							")")))
-				       (if extract-text-debugging
-					   (extract-text-debug-next nil msg))
+					   (oneonly (= (length strs) 1)))
+				       (if (and extract-text-debugging
+						(not (equal new str)))
+					   (let ((beg (+ 17 (length regexp) (length rep)
+							 (cl-loop for i from 0 to (1- idx)
+								  sum (+ 3 (length (nth i strs))))
+							 (if oneonly 0 2)))
+						 (msg2 (concat msg " -> \"" new "\"")))
+					     (extract-text-debug-next
+					      nil msg2 (list (cons beg (+ beg (length str) 2))
+							     (cons (+ (length msg) 4) (length msg2))))))
 				       new)
 				   str)) strs))))
   "A list of builtin wrapper functions that can be used with `extract-text':
@@ -323,12 +331,6 @@ one of these programs and its arguments (in the case of interactive functions)."
   :group 'extract-text
   :type 'boolean)
 
-(defun extract-text-propertize-string (str start end &rest props)
-  "Apply PROPS to STR between positions START and END."
-  (concat (substring str 0 start)
-	  (apply 'propertize (substring str start end) props)
-	  (substring str end)))
-
 (defun extract-text-dehighlight (&optional currentonly)
   "Remove debug highlighting.
 Removes all overlays in `extract-text-old-overlays' and `extract-text-overlays'.
@@ -372,9 +374,9 @@ list of cons cells indicating regions of MSG that should be highlighted"
 			(cons ov2 extract-text-overlays)))))
   (let ((inhibit-quit t))
     (cl-loop for (beg . end) in msgregions
-	     do (setq msg (extract-text-propertize-string
-			   msg beg end 'face isearch-face)))
-    (let ((key (read-char (format "%s\nPress any key to continue, or C-g to quit" msg)))) 
+	     do (set-text-properties beg end (list 'face isearch-face) msg))
+    (let ((key (read-char
+		(concat msg "\nPress c to continue to end, q/C-g to quit, or any other key to step forward")))) 
       (case key
 	((7 113) (extract-text-dehighlight)
 	 (setq inhibit-quit nil)
@@ -427,24 +429,24 @@ other than t (including nil) then that value will be returned if there is an err
 	(setq matches (match-strings-no-properties regexp))
       error)
     (when extract-text-debugging
-      (let ((strpos1 -1)
-	    (strpos2 0)
-	    (rlen (length regexp))
-	    startpos2 endpos2)
+      (let ((beg -1)
+	    (end 0)
+	    (rlen (length regexp)))
 	(if (> (length matches) 1)
 	    (cl-loop for matchnum from 1 to (1- (length matches))
 		     while extract-text-debugging
 		     do (progn
-			  (setq strpos1 (string-match-p "\\\\(" regexp (min (1+ strpos1) rlen))
-				strpos2 (+ 2 (string-match-p "\\\\)" regexp (min strpos2 rlen))))
+			  (setq beg (string-match-p "\\\\(" regexp (min (1+ beg) rlen))
+				end (+ 2 (string-match-p "\\\\)" regexp (min end rlen))))
 			  (extract-text-debug-next
-			   (list (cons (match-beginning matchnum)
-				       (match-end matchnum)))
-			   (format "(regex \"%s\")" regexp)
-			   (list (cons (+ strpos1 8) (+ strpos2 8))))))
+			   (list (cons (match-beginning matchnum) (match-end matchnum)))
+			   (format "(regex %S)" regexp)
+			   (list (cons (+ 6 (length (prin1-to-string (substring regexp 0 beg))))
+				       (+ 6 (length (prin1-to-string (substring regexp 0 end)))))))))
 	  (extract-text-debug-next
 	   (list (cons (match-beginning 0) (match-end 0)))
-	   (format "(regex \"%s\")" regexp) (list (cons 8 (+ (length regexp) 8)))))))
+	   (format "(regex %S)" regexp)
+	   (list (cons 7 (+ (length (prin1-to-string regexp)) 7)))))))
     matches))
 
 ;;;###autoload
