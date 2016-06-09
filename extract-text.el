@@ -384,7 +384,7 @@ list of cons cells indicating regions of MSG that should be highlighted"
   (let ((inhibit-quit t))
     (cl-loop for (beg . end) in msgregions
 	     do (set-text-properties beg end (list 'face isearch-face) msg))
-    (let ((key (read-char
+    (let ((key (read-char-exclusive
 		(concat msg "\nPress c to continue to end, q/C-g to quit, or any other key to step forward")))) 
       (case key
 	((7 113) (extract-text-dehighlight)
