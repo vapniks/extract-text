@@ -567,7 +567,9 @@ to continue after each match."
 			     (setq pairs (cons (cons (point) (+ (point) width)) pairs))
 			     (forward-line 1)
 			     (move-to-column scol t))
-			   (filter (reverse pairs)))))
+			   (filter (reverse pairs))))
+	     (debugmaybe (pair) (if extract-text-debugging
+				    (extract-text-debug-next pair msg (list (cons 6 (1- (length msg))))))))
     (let* ((tl2 (getpos tl (if inctl 'match-beginning 'match-end)))
 	   (br2 (getpos br (if incbr 'match-end 'match-beginning)))
 	   (msg (concat (format "(rect %s %s " tl br)
@@ -581,42 +583,30 @@ to continue after each match."
 		   (cond
 		    ((and tl2 br2 (eq cols t))
 		     (prog1 (split-string (buffer-substring-no-properties tl2 br2) "\n")
-		       (if extract-text-debugging
-			   (extract-text-debug-next (list (cons tl2 br2)) msg))))
+		       (debugmaybe (list (cons tl2 br2)))))
 		    ((and tl2 br2 (eq rows t))
 		     (prog1 (extract-rectangle (adjust2 tl2 t) (adjust2 br2 nil))
-		       (if extract-text-debugging
-			   (extract-text-debug-next (rectcoords (adjust2 tl2 t) (adjust2 br2 nil)) msg))))
+		       (debugmaybe (rectcoords (adjust2 tl2 t) (adjust2 br2 nil)))))
 		    ((and tl2 br2)
 		     (prog1 (extract-rectangle tl2 br2)
-		       (if extract-text-debugging
-			   (extract-text-debug-next (rectcoords tl2 br2) msg))))
+		       (debugmaybe (rectcoords tl2 br2))))
 		    ((and tl2 (numberp rows) (eq cols t))
-		     (prog1 (split-string (buffer-substring-no-properties
-					   tl2 (adjust1 tl2 nil rows 1)) "\n")
-		       (if extract-text-debugging
-			   (extract-text-debug-next (list (cons tl2 (adjust1 tl2 nil rows 1))) msg))))
+		     (prog1 (split-string (buffer-substring-no-properties tl2 (adjust1 tl2 nil rows 1)) "\n")
+		       (debugmaybe (list (cons tl2 (adjust1 tl2 nil rows 1))))))
 		    ((and br2 (numberp rows) (eq cols t))
 		     (prog1 (split-string (buffer-substring-no-properties (adjust1 br2 t rows 1) br2) "\n")
-		       (if extract-text-debugging
-			   (extract-text-debug-next (list (cons (adjust1 br2 t rows 1) br2)) msg))))
+		       (debugmaybe (list (cons (adjust1 br2 t rows 1) br2)))))
 		    ((and tl2 (numberp cols) (eq rows t))
 		     (prog1 (extract-rectangle (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil))
-		       (if extract-text-debugging
-			   (extract-text-debug-next (rectcoords (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil))
-						    msg))))
+		       (debugmaybe (rectcoords (adjust2 tl2 t) (adjust2 (adjust3 tl2 cols t) nil)))))
 		    ((and br2 (numberp cols) (eq rows t))
 		     (prog1 (extract-rectangle (adjust2 (adjust3 br2 cols nil) t) (adjust2 br2 nil))
-		       (if extract-text-debugging
-			   (extract-text-debug-next (rectcoords (adjust2 (adjust3 br2 cols nil) t) (adjust2 br2 nil))
-						    msg))))
+		       (debugmaybe (rectcoords (adjust2 (adjust3 br2 cols nil) t) (adjust2 br2 nil)))))
 		    ((and (or tl2 br2) rows cols)
 		     (prog1 (extract-rectangle (or tl2 (adjust1 br2 t rows cols))
 					       (or br2 (adjust1 tl2 nil rows cols)))
-		       (if extract-text-debugging
-			   (extract-text-debug-next (rectcoords (or tl2 (adjust1 br2 t rows cols))
-								(or br2 (adjust1 tl2 nil rows cols)))
-						    msg))))))))
+		       (debugmaybe (rectcoords (or tl2 (adjust1 br2 t rows cols))
+					       (or br2 (adjust1 tl2 nil rows cols))))))))))
       (if (memq 'nomatch (list tl2 br2)) error (filter strs)))))
 
 ;;;###autoload
