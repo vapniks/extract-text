@@ -655,8 +655,8 @@ the user to apply to the list of arguments for `extract-text' which are returned
 (cl-defmacro extract-text (&rest args)
   "Extract text from current buffer according to specifications in ARGS.
 ARGS should be a list/tree of wrapper functions for extracting bits of text (see below).
-If `extract-text-debugging' is non-nil then run in debug mode, so you should set this to nil
-when calling `extract-text' from another function.
+If `extract-text-debugging' is non-nil then run in debug mode, so you should normally 
+set this to nil when calling `extract-text' from another function.
 
 The text extraction is carried out in a sequential and recursive manner according 
 to the elements of ARGS, and the returned results reflect the structure of ARGS. 
