@@ -304,7 +304,7 @@ is currently being carried and make use of `extract-text-debug-next'."
 This list can be used to store useful extraction programs that you might want to reuse.
 Each element is a list of three items:
  1) A name or short description of the extraction.
- 2) A list of arguments for `extract-text', or an interactive function which returns 
+ 2) A list of arguments for `extract-text' (which see), or an interactive function which returns 
     such a list. 
  3) An optional postprocessing function to rearrange the list of results returned by
     `extract-text-from-buffers' and `extract-text-from-files' before they are exported
